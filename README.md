@@ -108,7 +108,7 @@ READS = ["R1", "R2"]
 rule all:
     input:
         expand("run_bulkRNA/rawQC/fastqc/{sample}.fastq.{read}_fastqc.zip", sample=SAMPLES, read=READS),
-        "run_bulkRNA/rawQC/rawQC_multiqc_report.html"
+        "run_bulkRNA/rawQC/multiqc_report.html"
 
 rule fastqc:
   input:
