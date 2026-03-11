@@ -127,10 +127,10 @@ rule multiqc:
             sample=SAMPLES,
             read=READS)
   output:
-    "run_bulkRNA/rawQC/rawQC_multiqc_report.html"
+    "run_bulkRNA/rawQC/multiqc_report.html"
   shell:
     """
-    multiqc {input} -o run_bulkRNA/rawQC
+    multiqc rawQC/fastqc -o run_bulkRNA/rawQC
     """
 ```
 
