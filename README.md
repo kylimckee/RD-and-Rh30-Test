@@ -130,7 +130,7 @@ rule multiqc:
     "run_bulkRNA/rawQC/multiqc_report.html"
   shell:
     """
-    multiqc rawQC/fastqc -o run_bulkRNA/rawQC
+    multiqc run_bulkRNA/rawQC/fastqc -o run_bulkRNA/rawQC
     """
 ```
 
