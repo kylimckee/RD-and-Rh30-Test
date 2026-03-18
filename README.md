@@ -148,12 +148,12 @@ sbatch --time=00-04:00:00 --wrap="snakemake -s rawQC_pipeline.smk"
 The CutAdapt pipeline requires a working directory where the FASTQ files can be accessed.
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA
 mkdir trimmed_FASTQ
 mkdir logs
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA/logs
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/logs
 mkdir logs_CutAdapt
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
+cd /data/mckeeka/bulkRNA_RMS/
 ```
 
 ## Generate CutAdapt Pipeline Configuration
@@ -163,7 +163,7 @@ This pipeline was generated to cut the adapters from the raw FASTQ files after s
 ### Install CutAdapt Tools
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
+cd /data/mckeeka/bulkRNA_RMS/
 conda create -n CutAdapt -c bioconda snakemake cutadapt -y
 conda activate CutAdapt
 ```
@@ -181,22 +181,22 @@ quality_trimming = "20,20"   #Recommended value
 overlap = 5                  #Recommended value
 threads = 4 
 
-SAMPLES = glob_wildcards("MCI_fastq_117_STS_FASTQ/{sample}.fastq.1.gz").sample
+SAMPLES = glob_wildcards("bulkRNA/{sample}.fastq.R1.gz").sample
 
 rule all:
     input:
-        expand("trimmed_FASTQ/{sample}.fastq.1.trimmed.gz", sample=SAMPLES),
-        expand("trimmed_FASTQ/{sample}.fastq.2.trimmed.gz", sample=SAMPLES)
+        expand("run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R1.trimmed.gz", sample=SAMPLES),
+        expand("run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R2.trimmed.gz", sample=SAMPLES)
 
 rule cutadapt_pe:
   input:
-    r1 = "MCI_fastq_117_STS_FASTQ/{sample}.fastq.1.gz",
-    r2 = "MCI_fastq_117_STS_FASTQ/{sample}.fastq.2.gz"
+    r1 = "bulkRNA/{sample}.fastq.R1.gz",
+    r2 = "bulkRNA/{sample}.fastq.R2.gz"
   output:
-    r1 = "trimmed_FASTQ/{sample}.fastq.1.trimmed.gz",
-    r2 = "trimmed_FASTQ/{sample}.fastq.2.trimmed.gz"
+    r1 = "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R1.trimmed.gz",
+    r2 = "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R2.trimmed.gz"
   log:
-    "logs/logs_CutAdapt/{sample}.CutAdapt.log"
+    "run_bulkRNA/logs/logs_CutAdapt/{sample}.CutAdapt.log"
   shell:
     """
     cutadapt \
@@ -219,8 +219,8 @@ rule cutadapt_pe:
 The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
-sbatch --cpus-per-task=4 --mem=16G --time=04-00:00:00 \--wrap "snakemake -s CutAdapt_pipeline.smk -j 4"
+cd /data/mckeeka/bulkRNA_RMS/
+sbatch --cpus-per-task=4 --mem=16G --time=03:00:00 \--wrap "snakemake -s CutAdapt_pipeline.smk -j 4"
 ```
 
 ## Create Trimmed QC Pipeline Working Directory
