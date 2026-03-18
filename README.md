@@ -228,9 +228,9 @@ sbatch --cpus-per-task=4 --mem=16G --time=03:00:00 \--wrap "snakemake -s CutAdap
 The Trimmed QC pipeline requires a working directory where the FASTQ files can be accessed.
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA
 mkdir trimmedQC
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA/trimmedQC
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/trimmedQC
 mkdir fastqc
 ```
 
@@ -241,7 +241,7 @@ This pipeline was generated to perform analysis of the raw FASTQ data after sequ
 ### Install QC Tools
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
+cd /data/mckeeka/bulkRNA_RMS/
 conda create -n trimmedQC -c bioconda snakemake fastqc multiqc -y
 conda activate trimmedQC
 ```
@@ -253,35 +253,35 @@ nano trimmedQC_pipeline.smk
 
 # Add the following code to the configuration file:
 
-SAMPLES = glob_wildcards("MCI_fastq_117_STS_FASTQ/{sample}.fastq.1.gz").sample
+SAMPLES = glob_wildcards("bulkRNA/{sample}.fastq.R1.gz").sample
+READS = ["R1", "R2"]
 
 rule all:
     input:
-        expand("trimmedQC/fastqc/{sample}.fastq.{read}.trimmed_fastqc.zip", sample=SAMPLES, read=[1,2]),
-        "trimmedQC/trimmedQC_multiqc_report.html"
+        expand("run_bulkRNA/trimmedQC/fastqc/{sample}.fastq.{read}.trimmed_fastqc.zip", sample=SAMPLES, read=READS),
+        "run_bulkRNA/trimmedQC/trimmedQC_multiqc_report.html"
 
 rule fastqc:
   input:
-    "trimmed_FASTQ/{sample}.fastq.{read}.trimmed.gz"
+    "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.{read}.trimmed.gz"
   output:
-    html="trimmedQC/fastqc/{sample}.fastq.{read}.trimmed_fastqc.html",
-    zip="trimmedQC/fastqc/{sample}.fastq.{read}.trimmed_fastqc.zip"
-  threads: 4
+    html="run_bulkRNA/trimmedQC/fastqc/{sample}.fastq.{read}.trimmed_fastqc.html",
+    zip="run_bulkRNA/trimmedQC/fastqc/{sample}.fastq.{read}.trimmed_fastqc.zip"
   shell:
     """
-    fastqc -t {threads} -o trimmedQC/fastqc {input}
+    fastqc -o run_bulkRNA/trimmedQC/fastqc {input}
     """
 
 rule multiqc:
   input:
-    expand("trimmedQC/fastqc/{sample}.fastq.{read}.trimmed_fastqc.zip",
+    expand("run_bulkRNA/trimmedQC/fastqc/{sample}.fastq.{read}.trimmed_fastqc.zip",
             sample=SAMPLES,
             read=[1,2])
   output:
-    "trimmedQC/trimmedQC_multiqc_report.html"
+    "run_bulkRNA/trimmedQC/trimmedQC_multiqc_report.html"
   shell:
     """
-    multiqc trimmedQC/fastqc -o trimmedQC
+    multiqc run_bulkRNA/trimmedQC/fastqc -o run_bulkRNA/trimmedQC
     """
 ```
 
@@ -290,8 +290,8 @@ rule multiqc:
 The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
-sbatch --cpus-per-task=4 --mem=16G --time=02-00:00:00 \--wrap "snakemake -s trimmedQC_pipeline.smk -j 4"
+cd /data/mckeeka/bulkRNA_RMS/
+sbatch --time=02:00:00 --wrap "snakemake -s trimmedQC_pipeline.smk"
 ```
 
 ## Create Clean FASTQ Pipeline Working Directory
