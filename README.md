@@ -354,16 +354,16 @@ nano cleanFASTQ_pipeline.smk
 
 # Add the following code to the configuration file:
 
-SAMPLES = glob_wildcards("run_bulkRNA/trimmed_FASTQ/{sample}.fastq.1.trimmed.gz").sample
+SAMPLES = glob_wildcards("run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R1.trimmed.gz").sample
 
 rule all:
     input:
-        expand("run_bulkRNA/clean_FASTQ/{sample}.fastq.{read}.clean.gz", sample=SAMPLES, read=[1,2])
+        expand("run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.gz", sample=SAMPLES, read=[1,2])
 
 rule kraken2:
   input:
-    r1 = "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.1.trimmed.gz",
-    r2 = "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.2.trimmed.gz"
+    r1 = "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R1.trimmed.gz",
+    r2 = "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R2.trimmed.gz"
   output:
     report = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}_report.txt",
     output = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}_output.txt"
@@ -385,11 +385,11 @@ rule extract_human_unclassified:
   input:
     kraken2 = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}_output.txt",
     report = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}_report.txt",
-    r1 = "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.1.trimmed.gz",
-    r2 = "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.2.trimmed.gz"
+    r1 = "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R1.trimmed.gz",
+    r2 = "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R2.trimmed.gz"
   output:
-    r1 = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.1.kraken.gz",
-    r2 = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.2.kraken.gz"
+    r1 = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R1.kraken.gz",
+    r2 = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R2.kraken.gz"
   log:
     "run_bulkRNA/logs/logs_cleanFASTQ/logs_kraken2/{sample}.kraken2_filter.log"
   shell:
@@ -429,8 +429,8 @@ rule extract_human_unclassified:
 
 rule bowtie2_contaminant_mapping:
   input:
-    r1 = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.1.kraken.gz",
-    r2 = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.2.kraken.gz"
+    r1 = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R1.kraken.gz",
+    r2 = "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R2.kraken.gz"
   output:
     bam = "run_bulkRNA/clean_FASTQ/bowtie2_output/{sample}_contamination.bam"
   threads: 4
@@ -452,13 +452,14 @@ rule filter_unmapped:
   input:
     bam = "run_bulkRNA/clean_FASTQ/bowtie2_output/{sample}_contamination.bam"
   output:
-    r1 = "run_bulkRNA/clean_FASTQ/{sample}.fastq.1.clean.gz",
-    r2 = "run_bulkRNA/clean_FASTQ/{sample}.fastq.2.clean.gz"
+    temp_bam = temp("run_bulkRNA/clean_FASTQ/bowtie2_output/{sample}_unmapped.bam"),
+    r1 = "run_bulkRNA/clean_FASTQ/{sample}.fastq.R1.clean.gz",
+    r2 = "run_bulkRNA/clean_FASTQ/{sample}.fastq.R2.clean.gz"
   log:
     "run_bulkRNA/logs/logs_cleanFASTQ/logs_bowtie2/{sample}.bowtie2_filter.log"
   shell:
     """
-    samtools view -b -f 12 -F 256 {input.bam} > temp("run_bulkRNA/clean_FASTQ/bowtie2_output/{sample}_unmapped.bam")
+    samtools view -b -f 12 -F 256 {input.bam} > {output.temp_bam}
 
     bedtools bamtofastq \
         -i run_bulkRNA/clean_FASTQ/bowtie2_output/{sample}_unmapped.bam \
@@ -551,7 +552,7 @@ rule star_two_pass:
     bam = "run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam"
   log:
     "run_bulkRNA/logs/logs_STAR/{sample}.log"
-  threads: 4
+  threads: 2
   shell:
     """
     STAR \
