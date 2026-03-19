@@ -552,7 +552,7 @@ rule star_two_pass:
     bam = "run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam"
   log:
     "run_bulkRNA/logs/logs_STAR/{sample}.log"
-  threads: 2
+  threads: 1
   shell:
     """
     STAR \
@@ -585,7 +585,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
-sbatch --cpus-per-task=4 --mem=64G --time=12:00:00 \--wrap "snakemake -s STARmap_pipeline.smk -j 4"
+sbatch --cpus-per-task=4 --mem=64G --time=12:00:00 \--wrap "snakemake -s STARmap_pipeline.smk --jobs 4"
 ```
 
 ## Create Indexing Pipeline Working Directory
