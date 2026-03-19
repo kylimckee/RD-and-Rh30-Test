@@ -301,18 +301,6 @@ sbatch --time=02:00:00 --wrap "snakemake -s trimmedQC_pipeline.smk"
 ```
 
 
-## Create Clean FASTQ Pipeline Working Directory
-
-The Clean FASTQ pipeline requires a working directory where the FASTQ files can be accessed.
-
-```bash
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
-mkdir cleanFASTQ
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA/logs
-mkdir logs_cleanFASTQ
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
-```
-
 ## Generate Clean FASTQ Pipeline Configuration
 
 This pipeline was generated to clean the FASTQs after sequencing to eliminate contamination.
@@ -320,7 +308,7 @@ This pipeline was generated to clean the FASTQs after sequencing to eliminate co
 ### Install Clean FASTQ Tools
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
+cd /data/mckeeka/bulkRNA_sarcoma
 conda create -n cleanFASTQ -c bioconda snakemake kraken2 bowtie2 KrakenTools BEDTools SAMtools -y
 conda activate cleanFASTQ
 ```
@@ -330,14 +318,14 @@ conda activate cleanFASTQ
 The Clean FASTQ pipeline requires a working directory where the standard reference databases can be accessed. You can symlink these files instead of copying them into the pipeline directory to prevent the duplication of large data files in your directory.
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA
 mkdir clean_FASTQ
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA/clean_FASTQ
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/clean_FASTQ
 mkdir kraken2_output
 mkdir bowtie2_output
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA/logs
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/logs
 mkdir logs_cleanFASTQ
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA/logs/logs_cleanFASTQ
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/logs/logs_cleanFASTQ
 mkdir logs_kraken2
 mkdir logs_bowtie2
 
@@ -361,7 +349,7 @@ bowtie2-build contaminants.fa contaminants_index/contaminants
 ### Create Snakemake Clean FASTQ Configuration File
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma
+cd /data/mckeeka/bulkRNA_RMS
 nano cleanFASTQ_pipeline.smk
 
 # Add the following code to the configuration file:
@@ -415,8 +403,8 @@ rule extract_human_unclassified:
         -t 9606 \
         --include-children \
         --fastq-output \
-        -o human_1.fastq.gz \
-        -o2 human_2.fastq.gz
+        -o human_1_{wildcards.sample}.fastq.gz \
+        -o2 human_2_{wildcards.sample}.fastq.gz
 
     #Extract unclassified reads
     extract_kraken_reads.py \
@@ -426,15 +414,16 @@ rule extract_human_unclassified:
         -s2 {input.r2} \
         -t 0 \
         --fastq-output \
-        -o unclassified_1.fastq.gz \
-        -o2 unclassified_2.fastq.gz
+        -o unclassified_1_{wildcards.sample}.fastq.gz \
+        -o2 unclassified_2_{wildcards.sample}.fastq.gz
 
     #Combine human and unclassified reads
-    cat human_1.fastq.gz unclassified_1.fastq.gz > {output.r1}
-    cat human_2.fastq.gz unclassified_2.fastq.gz > {output.r2}
+    cat human_1_{wildcards.sample}.fastq.gz unclassified_1_{wildcards.sample}.fastq.gz > {output.r1}
+    cat human_2_{wildcards.sample}.fastq.gz unclassified_2_{wildcards.sample}.fastq.gz > {output.r2}
 
     #Remove temporary files
-    rm human_1.fastq.gz human_2.fastq.gz unclassified_1.fastq.gz unclassified_2.fastq.gz > {output.r1} \
+    rm human_1_{wildcards.sample}.fastq.gz human_2_{wildcards.sample}.fastq.gz \
+        unclassified_1_{wildcards.sample}.fastq.gz unclassified_2_{wildcards.sample}.fastq.gz
     &> {log}
     """
 
@@ -485,8 +474,8 @@ rule filter_unmapped:
 The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma
-sbatch --cpus-per-task=4 --mem=64G --time=05-00:00:00 \--wrap "snakemake -s cleanFASTQ_pipeline.smk -j 4"
+cd /data/mckeeka/bulkRNA_RMS
+sbatch --cpus-per-task=4 --mem=64G --time=01-00:00:00 \--wrap "snakemake -s cleanFASTQ_pipeline.smk -j 4"
 ```
 
 ## Create STAR Mapping Pipeline Working Directory
