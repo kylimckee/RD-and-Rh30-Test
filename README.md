@@ -399,7 +399,7 @@ rule extract_human_unclassified:
     tmp_u1=$(mktemp)
     tmp_u2=$(mktemp)
 
-    {
+    {{
         #Extract human reads
         extract_kraken_reads.py \
             -k {input.kraken2} \
@@ -429,7 +429,7 @@ rule extract_human_unclassified:
 
         #Remove temporary files
         rm -f $tmp_h1 $tmp_h2 $tmp_u1 $tmp_u2
-    } &> {log}
+    }} &> {log}
     """
 
 rule bowtie2_contaminant_mapping:
@@ -464,14 +464,14 @@ rule filter_unmapped:
     "run_bulkRNA/logs/logs_cleanFASTQ/logs_bowtie2/{sample}.bowtie2_filter.log"
   shell:
     """
-    {
+    {{
         samtools view -b -f 12 -F 256 {input.bam} > {output.temp_bam}
 
         bedtools bamtofastq \
             -i {output.temp_bam} \
             -fq {output.r1} \
             -fq2 {output.r2}
-    } &> {log}
+    }} &> {log}
     """
 
 ```
@@ -532,7 +532,7 @@ rule star_index:
     fasta=GENOME_FASTA,
     gtf=GTF
   output:
-    "reference/STAR_index"
+    STAR_INDEX_DIR
   params:
     outdir=STAR_INDEX_DIR
   threads: 4
@@ -558,7 +558,7 @@ rule star_two_pass:
     bam = "run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam"
   log:
     "run_bulkRNA/logs/logs_STAR/{sample}.log"
-  threads: 1
+  threads: 4
   shell:
     """
     STAR \
@@ -577,7 +577,7 @@ rule samtools_index:
     bam = "run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam"
   output:
     bai = "run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam.bai"
-  threads: 4
+  threads: 1
   shell:
     """
     samtools index {input.bam}
@@ -591,7 +591,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
-sbatch --cpus-per-task=4 --mem=64G --time=12:00:00 \--wrap "snakemake -s STARmap_pipeline.smk --jobs 4"
+sbatch --cpus-per-task=4 --mem=64G --time=12:00:00 --wrap "snakemake -s STARmap_pipeline.smk --jobs 1"
 ```
 
 ## Create Indexing Pipeline Working Directory
