@@ -348,13 +348,12 @@ bowtie2-build contaminants.fa contaminants_index/contaminants
 
 ### Create Snakemake Clean FASTQ Configuration File
 
-```bash
-cd /data/mckeeka/bulkRNA_RMS
+cd /data/mckeeka/bulkRNA_sarcoma
 nano cleanFASTQ_pipeline.smk
 
 # Add the following code to the configuration file:
 
-SAMPLES = glob_wildcards("run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R1.trimmed.gz").sample
+SAMPLES = glob_wildcards("run_bulkRNA/trimmed_FASTQ/{sample}.fastq.1.trimmed.gz").sample
 
 rule all:
     input:
@@ -394,37 +393,42 @@ rule extract_human_unclassified:
     "run_bulkRNA/logs/logs_cleanFASTQ/logs_kraken2/{sample}.kraken2_filter.log"
   shell:
     """
-    #Extract human reads
-    extract_kraken_reads.py \
-        -k {input.kraken2} \
-        -r {input.report} \
-        -s {input.r1} \
-        -s2 {input.r2} \
-        -t 9606 \
-        --include-children \
-        --fastq-output \
-        -o human_1_{wildcards.sample}.fastq.gz \
-        -o2 human_2_{wildcards.sample}.fastq.gz
+    tmp_h1=$(mktemp)
+    tmp_h2=$(mktemp)
+    tmp_u1=$(mktemp)
+    tmp_u2=$(mktemp)
 
-    #Extract unclassified reads
-    extract_kraken_reads.py \
-        -k {input.kraken2} \
-        -r {input.report} \
-        -s {input.r1} \
-        -s2 {input.r2} \
-        -t 0 \
-        --fastq-output \
-        -o unclassified_1_{wildcards.sample}.fastq.gz \
-        -o2 unclassified_2_{wildcards.sample}.fastq.gz
+    {
+        #Extract human reads
+        extract_kraken_reads.py \
+            -k {input.kraken2} \
+            -r {input.report} \
+            -s {input.r1} \
+            -s2 {input.r2} \
+            -t 9606 \
+            --include-children \
+            --fastq-output \
+            -o $tmp_h1 \
+            -o2 $tmp_h2
 
-    #Combine human and unclassified reads
-    cat human_1_{wildcards.sample}.fastq.gz unclassified_1_{wildcards.sample}.fastq.gz > {output.r1}
-    cat human_2_{wildcards.sample}.fastq.gz unclassified_2_{wildcards.sample}.fastq.gz > {output.r2}
+        #Extract unclassified reads
+        extract_kraken_reads.py \
+            -k {input.kraken2} \
+            -r {input.report} \
+            -s {input.r1} \
+            -s2 {input.r2} \
+            -t 0 \
+            --fastq-output \
+            -o $tmp_u1 \
+            -o2 $tmp_u2
 
-    #Remove temporary files
-    rm human_1_{wildcards.sample}.fastq.gz human_2_{wildcards.sample}.fastq.gz \
-        unclassified_1_{wildcards.sample}.fastq.gz unclassified_2_{wildcards.sample}.fastq.gz
-    &> {log}
+        #Combine human and unclassified reads
+        cat $tmp_h1 $tmp_u1 > {output.r1}
+        cat $tmp_h2 $tmp_u2 > {output.r2}
+
+        #Remove temporary files
+        rm -f $tmp_h1 $tmp_h2 $tmp_u1 $tmp_u2
+    } &> {log}
     """
 
 rule bowtie2_contaminant_mapping:
@@ -454,18 +458,19 @@ rule filter_unmapped:
   output:
     temp_bam = temp("run_bulkRNA/clean_FASTQ/bowtie2_output/{sample}_unmapped.bam"),
     r1 = "run_bulkRNA/clean_FASTQ/{sample}.fastq.R1.clean.gz",
-    r2 = "run_bulkRNA/clean_FASTQ/{sample}.fastq.R2.clean.gz"
+    r2 = "run_bulkRNA/clean_FASTQ/{sample}.fastq.R2.clean.gz",
   log:
     "run_bulkRNA/logs/logs_cleanFASTQ/logs_bowtie2/{sample}.bowtie2_filter.log"
   shell:
     """
-    samtools view -b -f 12 -F 256 {input.bam} > {output.temp_bam}
+    {
+        samtools view -b -f 12 -F 256 {input.bam} > {output.temp_bam}
 
-    bedtools bamtofastq \
-        -i run_bulkRNA/clean_FASTQ/bowtie2_output/{sample}_unmapped.bam \
-        -fq {output.r1} \
-        -fq2 {output.r2} \
-        &> {log}
+        bedtools bamtofastq \
+            -i {output.temp_bam} \
+            -fq {output.r1} \
+            -fq2 {output.r2}
+    } &> {log}
     """
 
 ```
@@ -476,7 +481,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
-sbatch --cpus-per-task=4 --mem=64G --time=01-00:00:00 \--wrap "snakemake -s cleanFASTQ_pipeline.smk -j 4"
+sbatch --cpus-per-task=8 --mem=128G --time=01-00:00:00 \--wrap "snakemake -s cleanFASTQ_pipeline.smk -j 8"
 ```
 
 ## Create STAR Mapping Pipeline Working Directory
