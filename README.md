@@ -348,6 +348,7 @@ bowtie2-build contaminants.fa contaminants_index/contaminants
 
 ### Create Snakemake Clean FASTQ Configuration File
 
+```bash
 cd /data/mckeeka/bulkRNA_sarcoma
 nano cleanFASTQ_pipeline.smk
 
