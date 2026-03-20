@@ -308,7 +308,7 @@ This pipeline was generated to clean the FASTQs after sequencing to eliminate co
 ### Install Clean FASTQ Tools
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma
+cd /data/mckeeka/bulkRNA_RMS
 conda create -n cleanFASTQ -c bioconda snakemake kraken2 bowtie2 KrakenTools BEDTools SAMtools -y
 conda activate cleanFASTQ
 ```
@@ -349,7 +349,7 @@ bowtie2-build contaminants.fa contaminants_index/contaminants
 ### Create Snakemake Clean FASTQ Configuration File
 
 ```bash
-cd /data/mckeeka/bulkRNA_sarcoma
+cd /data/mckeeka/bulkRNA_RMS
 nano cleanFASTQ_pipeline.smk
 
 # Add the following code to the configuration file:
@@ -577,7 +577,7 @@ rule samtools_index:
     bam = "run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam"
   output:
     bai = "run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam.bai"
-  threads: 1
+  threads: 4
   shell:
     """
     samtools index {input.bam}
@@ -591,7 +591,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
-sbatch --cpus-per-task=4 --mem=64G --time=12:00:00 --wrap "snakemake -s STARmap_pipeline.smk --jobs 1"
+sbatch --cpus-per-task=4 --mem=64G --time=12:00:00 --wrap "snakemake -s STARmap_pipeline.smk --cores 4"
 ```
 
 ## Create Indexing Pipeline Working Directory
