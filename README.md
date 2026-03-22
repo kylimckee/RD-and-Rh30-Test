@@ -745,17 +745,20 @@ rule star_two_pass:
     "run_bulkRNA/logs/logs_STAR/{sample}.log"
   threads: 4
   shell:
-    """
-    STAR \
-        --runThreadN {threads} \
-        --genomeDir {input.index} \
-        --readFilesIn {input.r1} {input.r2} \
-        --readFilesCommand zcat \
-        --twopassMode Basic \
-        --outSAMtype BAM SortedByCoordinate \
-        --outFileNamePrefix run_bulkRNA/STAR/{wildcards.sample}. \
-        &> {log}
-    """
+      """
+      STAR \
+          --runThreadN {threads} \
+          --genomeDir {input.index} \
+          --readFilesIn {input.r1} {input.r2} \
+          --readFilesCommand zcat \
+          --twopassMode Basic \
+          --chimSegmentMin 12 \
+          --outFilterMultimapNmax 20 \
+          --winAnchorMultimapNmax 50 \
+          --outSAMtype BAM SortedByCoordinate \
+          --outFileNamePrefix run_bulkRNA/STAR/{wildcards.sample}. \
+          &> {log}
+      """
 
 rule samtools_index:
   input:
