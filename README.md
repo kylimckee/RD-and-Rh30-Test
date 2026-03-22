@@ -782,6 +782,113 @@ cd /data/mckeeka/bulkRNA_RMS
 sbatch --cpus-per-task=4 --mem=64G --time=01-00:00:00 --wrap "snakemake -s STARmap_pipeline.smk --cores 4"
 ```
 
+## Create STAR Mapping Pipeline Working Directory
+
+The STAR Mapping pipeline requires a working directory where the FASTQ files can be accessed.
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA
+mkdir STAR_filtered
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/logs
+mkdir logs_STAR
+cd /data/mckeeka/bulkRNA_RMS
+```
+
+## Generate STAR_Filtered Mapping Pipeline Configuration
+
+This pipeline was generated to cut the adapters from the raw FASTQ files after sequencing.
+
+
+### Create Snakemake STAR Mapping Configuration File
+
+```bash
+conda activate STARmap
+
+nano STARmap_pipeline_filtered.smk
+
+# Add the following code to the configuration file:
+
+GENOME_FASTA = "reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
+GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
+STAR_INDEX_DIR = "reference/STAR_index"
+
+SAMPLES = glob_wildcards("bulkRNA/{sample}.fastq.R1.gz").sample
+
+rule all:
+  input:
+    "reference/STAR_index",
+    expand("run_bulkRNA/STAR_filtered/{sample}.Aligned.sortedByCoord.out.bam.bai", sample=SAMPLES)
+
+rule star_index:
+  input:
+    fasta=GENOME_FASTA,
+    gtf=GTF
+  output:
+    STAR_INDEX_DIR
+  params:
+    outdir=STAR_INDEX_DIR
+  threads: 4
+  shell:
+    """
+    mkdir -p {params.outdir}
+
+    STAR \
+        --runThreadN {threads} \
+        --runMode genomeGenerate \
+        --genomeDir {output} \
+        --genomeFastaFiles {input.fasta} \
+        --sjdbGTFfile {input.gtf} \
+        --sjdbOverhang 99
+    """
+
+rule star_two_pass:
+  input:
+    r1 = "bulkRNA/{sample}.fastq.R1.gz",
+    r2 = "bulkRNA/{sample}.fastq.R2.gz",
+    index = STAR_INDEX_DIR
+  output:
+    bam = "run_bulkRNA/STAR_new/{sample}.Aligned.sortedByCoord.out.bam"
+  log:
+    "run_bulkRNA/logs/logs_STAR_new/{sample}.log"
+  threads: 4
+  shell:
+      """
+      STAR \
+          --runThreadN {threads} \
+          --genomeDir {input.index} \
+          --readFilesIn {input.r1} {input.r2} \
+          --readFilesCommand zcat \
+          --twopassMode Basic \
+          --chimSegmentMin 12 \
+          --outFilterMultimapNmax 20 \
+          --winAnchorMultimapNmax 50 \
+          --outSAMtype BAM SortedByCoordinate \
+          --outFileNamePrefix run_bulkRNA/STAR_new/{wildcards.sample}. \
+          &> {log}
+      """
+
+rule samtools_index:
+  input:
+    bam = "run_bulkRNA/STAR_new/{sample}.Aligned.sortedByCoord.out.bam"
+  output:
+    bai = "run_bulkRNA/STAR_new/{sample}.Aligned.sortedByCoord.out.bam.bai"
+  threads: 4
+  shell:
+    """
+    samtools index {input.bam}
+    """
+
+```
+
+### Run STAR Mapping Configuration File
+
+The pipeline must be run using sbatch on the Biowulf cluster.
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+sbatch --cpus-per-task=4 --mem=64G --time=01-00:00:00 --wrap "snakemake -s STARmap_pipeline.smk --cores 4"
+```
+
 ## Create Read Counts QC Pipeline Working Directory
 
 ```bash
