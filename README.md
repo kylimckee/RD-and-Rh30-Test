@@ -710,7 +710,7 @@ SAMPLES = glob_wildcards("bulkRNA/{sample}.fastq.R1.gz").sample
 rule all:
   input:
     "reference/STAR_index",
-    expand("run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam.bai", sample=SAMPLES)
+    expand("run_bulkRNA/STAR_new/{sample}.Aligned.sortedByCoord.out.bam.bai", sample=SAMPLES)
 
 rule star_index:
   input:
@@ -740,9 +740,9 @@ rule star_two_pass:
     r2 = "bulkRNA/{sample}.fastq.R2.gz",
     index = STAR_INDEX_DIR
   output:
-    bam = "run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam"
+    bam = "run_bulkRNA/STAR_new/{sample}.Aligned.sortedByCoord.out.bam"
   log:
-    "run_bulkRNA/logs/logs_STAR/{sample}.log"
+    "run_bulkRNA/logs/logs_STAR_new/{sample}.log"
   threads: 4
   shell:
       """
@@ -762,9 +762,9 @@ rule star_two_pass:
 
 rule samtools_index:
   input:
-    bam = "run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam"
+    bam = "run_bulkRNA/STAR_new/{sample}.Aligned.sortedByCoord.out.bam"
   output:
-    bai = "run_bulkRNA/STAR/{sample}.Aligned.sortedByCoord.out.bam.bai"
+    bai = "run_bulkRNA/STAR_new/{sample}.Aligned.sortedByCoord.out.bam.bai"
   threads: 4
   shell:
     """
@@ -779,7 +779,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
-sbatch --cpus-per-task=4 --mem=64G --time=12:00:00 --wrap "snakemake -s STARmap_pipeline.smk --cores 4"
+sbatch --cpus-per-task=4 --mem=64G --time=01-00:00:00 --wrap "snakemake -s STARmap_pipeline.smk --cores 4"
 ```
 
 ## Create Indexing Pipeline Working Directory
