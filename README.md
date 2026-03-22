@@ -457,32 +457,32 @@ rule filter_unmapped:
   input:
     bam = "run_bulkRNA/clean_FASTQ/bowtie2_output/{sample}_contamination.bam"
   output:
-    temp_bam = temp("run_bulkRNA/clean_FASTQ/bowtie2_output/{sample}_unmapped.bam"),
     r1 = "run_bulkRNA/clean_FASTQ/{sample}.fastq.R1.clean.gz",
-    r2 = "run_bulkRNA/clean_FASTQ/{sample}.fastq.R2.clean.gz",
+    r2 = "run_bulkRNA/clean_FASTQ/{sample}.fastq.R2.clean.gz"
   log:
     "run_bulkRNA/logs/logs_cleanFASTQ/logs_bowtie2/{sample}.bowtie2_filter.log"
   shell:
     """
-    {{
-        samtools view -b -f 12 -F 256 {input.bam} > {output.temp_bam}
+    set -euo pipefail
 
-        tmp_r1=$(mktemp)
-        tmp_r2=$(mktemp)
+    tmp_bam=$(mktemp --suffix=.bam)
+    tmp_namesort=$(mktemp --suffix=.bam)
+    tmp_r1=$(mktemp --suffix=.fq)
+    tmp_r2=$(mktemp --suffix=.fq)
 
-        bedtools bamtofastq \
-            -i {output.temp_bam} \
-            -fq "tmp_r1" \
-            -fq2 "tmp_r2"
+    samtools view -b -f 12 -F 256 {input.bam} > "$tmp_bam"
+    samtools sort -n -o "$tmp_namesort" "$tmp_bam"
 
-        gzip -c "$tmp_r1" > {output.r1}
-        gzip -c "$tmp_r2" > {output.r2}
+    bedtools bamtofastq \
+        -i "$tmp_namesort" \
+        -fq "$tmp_r1" \
+        -fq2 "$tmp_r2"
 
-        rm -f "$tmp_r1" "$tmp_r2"
+    gzip -c "$tmp_r1" > {output.r1}
+    gzip -c "$tmp_r2" > {output.r2}
 
-    }} &> {log}
-    """
-
+    rm -f "$tmp_bam" "$tmp_namesort" "$tmp_r1" "$tmp_r2"
+    """ + "&> {log}"
 ```
 
 ### Run Clean FASTQ Configuration File
@@ -513,7 +513,7 @@ This pipeline was generated to perform analysis of the raw FASTQ data after filt
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/
-conda create -n cleanQC -c bioconda snakemake fastqc multiqc -y
+conda create -n cleanQC -c conda-forge -c bioconda snakemake python=3.11 fastqc multiqc -y
 conda activate cleanQC
 ```
 
@@ -563,7 +563,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/
-sbatch --time=02:00:00 --wrap "snakemake -s cleanQC_pipeline.smk"
+sbatch --time=02:00:00 --wrap "snakemake -s cleanQC_pipeline.smk --cores 4"
 ```
 
 
@@ -660,7 +660,7 @@ rule summarize_read_counts:
 
 ```
 
-### Run CutAdapt Configuration File
+### Run Read Counts Configuration File
 
 The pipeline must be run using sbatch on the Biowulf cluster.
 
@@ -780,6 +780,80 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
 sbatch --cpus-per-task=4 --mem=64G --time=01-00:00:00 --wrap "snakemake -s STARmap_pipeline.smk --cores 4"
+```
+
+## Create Read Counts QC Pipeline Working Directory
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
+mkdir FeatureCounts
+```
+
+## Generate Feature Counts Pipeline Configuration
+
+This pipeline was generated to count the reads that were filtered out of each step of the Clean FASTQ pipeline.
+
+### Install Feature Counts Tools
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+conda create -n FeatureCounts -c conda-forge -c bioconda snakemake subread python=3.10 -y
+conda activate FeatureCounts
+```
+
+### Create Snakemake Feature Counts Configuration File
+
+```bash
+nano FeatureCounts_pipeline.smk
+
+# Add the following code to the configuration file:
+
+from pathlib import Path
+from glob import glob
+
+GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
+BAM_DIR = "run_bulkRNA/STAR_new"
+COUNT_DIR = "run_bulkRNA/FeatureCounts"
+
+SAMPLES = sorted(
+    Path(b).name.replace(".Aligned.sortedByCoord.out.bam", "")
+    for b in glob(f"{BAM_DIR}/*.Aligned.sortedByCoord.out.bam")
+)
+
+rule all:
+    input:
+        f"{COUNT_DIR}/gene_counts.txt"
+        
+rule featurecounts:
+    input:
+        bams=lambda wildcards: expand(
+            f"{BAM_DIR}" + "/{sample}.Aligned.sortedByCoord.out.bam",
+            sample=SAMPLES
+        ),
+        gtf=GTF
+    output:
+        counts=f"{COUNT_DIR}/gene_counts.txt"
+    threads: 6
+    shell:
+        """
+        featureCounts \
+            -T {threads} \
+            -a {input.gtf} \
+            -o {output.counts} \
+            -p \
+            -B \
+            -C \
+            {input.bams}
+        """
+```
+
+### Run Feature Counts Configuration File
+
+The pipeline must be run using sbatch on the Biowulf cluster.
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+sbatch --cpus-per-task=6 --time=01:00:00 --wrap "snakemake -s FeatureCounts_pipeline.smk --cores 6"
 ```
 
 ## Create Indexing Pipeline Working Directory
