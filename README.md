@@ -756,7 +756,7 @@ rule star_two_pass:
           --outFilterMultimapNmax 20 \
           --winAnchorMultimapNmax 50 \
           --outSAMtype BAM SortedByCoordinate \
-          --outFileNamePrefix run_bulkRNA/STAR/{wildcards.sample}. \
+          --outFileNamePrefix run_bulkRNA/STAR_new/{wildcards.sample}. \
           &> {log}
       """
 
