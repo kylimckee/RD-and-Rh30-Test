@@ -424,11 +424,11 @@ rule extract_human_unclassified:
             -o2 $tmp_u2
 
         #Combine human and unclassified reads
-        cat $tmp_h1 $tmp_u1 > gzip -c {output.r1}
-        cat $tmp_h2 $tmp_u2 > gzip -c {output.r2}
+        cat "$tmp_h1" "$tmp_u1" | gzip -c > {output.r1}
+        cat "$tmp_h2" "$tmp_u2" | gzip -c > {output.r2}
 
         #Remove temporary files
-        rm -f $tmp_h1 $tmp_h2 $tmp_u1 $tmp_u2
+        rm -f "$tmp_h1" "$tmp_h2" "$tmp_u1" "$tmp_u2"
     }} &> {log}
     """
 
@@ -472,13 +472,13 @@ rule filter_unmapped:
 
         bedtools bamtofastq \
             -i {output.temp_bam} \
-            -fq tmp_r1 \
-            -fq2 tmp_r2
+            -fq "tmp_r1" \
+            -fq2 "tmp_r2"
 
-        gzip -c $tmp_r1 > {output.r1}
-        gzip -c $tmp_r2 > {output.r2}
+        gzip -c "$tmp_r1" > {output.r1}
+        gzip -c "$tmp_r2" > {output.r2}
 
-        rm -f $tmp_r1 $tmp_r2
+        rm -f "$tmp_r1" "$tmp_r2"
 
     }} &> {log}
     """
