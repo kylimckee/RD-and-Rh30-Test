@@ -1099,7 +1099,6 @@ sbatch --cpus-per-task=6 --time=01:00:00 --wrap "snakemake -s FeatureCounts_pipe
 
 This pipeline was generated to count the features after STAR two-pass mapping on the filtered samples.
 
-### Install Feature Counts Tools
 
 ### Create Snakemake Feature Counts Filtered Configuration File
 
@@ -1155,6 +1154,496 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
 sbatch --cpus-per-task=6 --time=01:00:00 --wrap "snakemake -s FeatureCounts_filtered_pipeline.smk --cores 6"
+```
+
+### Install Feature Counts vs. Proteomics Tools
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+conda create -n r-prot -c conda-forge -c bioconda \
+  r-base r-tidyverse r-readxl r-pheatmap \
+  bioconductor-annotationdbi bioconductor-org.hs.eg.db bioconductor-biobase -y
+conda activate r-prot
+```
+
+### Create Feature Counts vs. Proteomics Configuration File
+
+```bash
+nano proteomics.r
+
+# Add the following code to the configuration file:
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(readxl)
+  library(stringr)
+  library(org.Hs.eg.db)
+  library(AnnotationDbi)
+})
+
+# -----------------------------
+# File paths
+# -----------------------------
+rna_unfiltered_file <- "gene_counts_unfiltered.txt"
+rna_filtered_file   <- "gene_counts_filtered.txt"
+
+prot_files <- c(
+  gel = "11122025_SmallProtein_gel_byband.xlsx",
+  sec = "11132025_SmallProtein_SEC_byfraction.xlsx"
+)
+
+# -----------------------------
+# 1) Read featureCounts files
+# -----------------------------
+rna_unfiltered_raw <- read.delim(rna_unfiltered_file,
+                                 comment.char = "#",
+                                 check.names = FALSE)
+
+rna_filtered_raw <- read.delim(rna_filtered_file,
+                               comment.char = "#",
+                               check.names = FALSE)
+
+rna_unfiltered <- rna_unfiltered_raw %>%
+  dplyr::select(Geneid, starts_with("run_bulkRNA/")) %>%
+  mutate(across(-Geneid, as.numeric)) %>%
+  tibble::column_to_rownames("Geneid")
+
+rna_filtered <- rna_filtered_raw %>%
+  dplyr::select(Geneid, starts_with("run_bulkRNA/")) %>%
+  mutate(across(-Geneid, as.numeric)) %>%
+  tibble::column_to_rownames("Geneid")
+
+map_ensembl_to_symbol <- function(df) {
+  df <- as.data.frame(df)
+  df$Geneid <- rownames(df)
+
+  df$Symbol <- AnnotationDbi::mapIds(
+    org.Hs.eg.db,
+    keys = df$Geneid,
+    column = "SYMBOL",
+    keytype = "ENSEMBL",
+    multiVals = "first"
+  )
+
+  df <- df %>%
+    filter(!is.na(Symbol)) %>%
+    dplyr::select(Symbol, where(is.numeric)) %>%
+    group_by(Symbol) %>%
+    summarise(across(where(is.numeric), sum), .groups = "drop")
+
+  tibble::column_to_rownames(df, "Symbol")
+}
+
+rna_unfiltered_sym <- map_ensembl_to_symbol(rna_unfiltered)
+rna_filtered_sym   <- map_ensembl_to_symbol(rna_filtered)
+
+# -----------------------------
+# 2) Read one proteomics file
+# -----------------------------
+read_proteomics_file <- function(path) {
+  prot_raw <- read_xlsx(path)
+  names(prot_raw) <- make.names(names(prot_raw))
+
+  if (!"Description" %in% names(prot_raw)) {
+    stop("No Description column found in: ", path)
+  }
+
+  prot_raw <- prot_raw %>%
+    mutate(
+      GeneSymbol = str_extract(Description, "GN=[^ ]+") %>%
+        str_remove("^GN=")
+    ) %>%
+    mutate(
+      GeneSymbol = ifelse(is.na(GeneSymbol), NA_character_, GeneSymbol),
+      GeneSymbol = str_split_fixed(GeneSymbol, ",", 2)[, 1]
+    )
+
+  candidate_numeric <- names(prot_raw)[vapply(prot_raw, is.numeric, logical(1))]
+
+  preferred_cols <- grep(
+    "intensity|lfq|abundance|area|quant|signal|psm",
+    candidate_numeric,
+    ignore.case = TRUE,
+    value = TRUE
+  )
+
+  if (length(preferred_cols) > 0) {
+    prot_value_col <- preferred_cols[1]
+  } else if ("X..PSMs" %in% names(prot_raw)) {
+    prot_value_col <- "X..PSMs"
+  } else if ("PSMs" %in% names(prot_raw)) {
+    prot_value_col <- "PSMs"
+  } else {
+    stop("No usable quantitative proteomics column found in: ", path)
+  }
+
+  message("Using proteomics numeric column for ", basename(path), ": ", prot_value_col)
+
+  prot <- prot_raw %>%
+    dplyr::select(GeneSymbol, all_of(prot_value_col)) %>%
+    filter(!is.na(GeneSymbol), GeneSymbol != "") %>%
+    mutate(across(all_of(prot_value_col), as.numeric)) %>%
+    group_by(GeneSymbol) %>%
+    summarise(value = mean(.data[[prot_value_col]], na.rm = TRUE), .groups = "drop") %>%
+    tibble::column_to_rownames("GeneSymbol")
+
+  log2(as.matrix(prot) + 1)
+}
+
+# -----------------------------
+# 3) Correlation function
+# -----------------------------
+calc_cor <- function(rna_data, prot_data, method_name) {
+  common_genes <- intersect(rownames(rna_data), rownames(prot_data))
+
+  if (length(common_genes) == 0) {
+    message("No overlapping genes for: ", method_name)
+    return(tibble(method = character(), sample = character(),
+                  pearson = numeric(), spearman = numeric()))
+  }
+
+  rna <- rna_data[common_genes, , drop = FALSE]
+  prot_vec <- prot_data[common_genes, 1, drop = TRUE]
+
+  map_dfr(colnames(rna), function(s) {
+    tibble(
+      method = method_name,
+      sample = s,
+      pearson = cor(rna[, s], prot_vec, use = "complete.obs", method = "pearson"),
+      spearman = cor(rna[, s], prot_vec, use = "complete.obs", method = "spearman")
+    )
+  })
+}
+
+# -----------------------------
+# 4) Run for each proteomics file
+# -----------------------------
+all_results <- map_dfr(names(prot_files), function(prot_name) {
+  prot_log <- read_proteomics_file(prot_files[[prot_name]])
+
+  bind_rows(
+    calc_cor(rna_unfiltered_sym, prot_log, "Unfiltered"),
+    calc_cor(rna_filtered_sym,   prot_log, "Filtered")
+  ) %>%
+    mutate(proteomics = prot_name)
+})
+
+print(all_results)
+
+write.csv(all_results, "rna_vs_proteomics_all_methods.csv", row.names = FALSE)
+
+# -----------------------------
+# 5) Clean sample labels
+# -----------------------------
+all_results <- all_results %>%
+  mutate(
+    sample_short = case_when(
+      str_detect(sample, "RD_1") ~ "RD1",
+      str_detect(sample, "RD_2") ~ "RD2",
+      str_detect(sample, "RD_3") ~ "RD3",
+      str_detect(sample, "RH30_1") ~ "RH30_1",
+      str_detect(sample, "RH30_2") ~ "RH30_2",
+      str_detect(sample, "RH30_3") ~ "RH30_3",
+      TRUE ~ sample
+    ),
+    sample_short = factor(sample_short,
+                          levels = c("RD1", "RD2", "RD3", "RH30_1", "RH30_2", "RH30_3"))
+  )
+
+# -----------------------------
+# 6) Summary: which proteomics file correlates the most?
+# -----------------------------
+summary_by_file <- all_results %>%
+  group_by(proteomics, method) %>%
+  summarise(
+    mean_pearson = mean(pearson, na.rm = TRUE),
+    sd_pearson   = sd(pearson, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+print(summary_by_file)
+
+best_file <- summary_by_file %>%
+  group_by(proteomics) %>%
+  summarise(overall_mean_pearson = mean(mean_pearson, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(overall_mean_pearson))
+
+print(best_file)
+
+# -----------------------------
+# 7) Presentation-friendly plots
+# -----------------------------
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(readxl)
+  library(stringr)
+  library(org.Hs.eg.db)
+  library(AnnotationDbi)
+})
+
+# -----------------------------
+# File paths
+# -----------------------------
+rna_unfiltered_file <- "gene_counts_unfiltered.txt"
+rna_filtered_file   <- "gene_counts_filtered.txt"
+
+prot_files <- c(
+  gel = "11122025_SmallProtein_gel_byband.xlsx",
+  sec = "11132025_SmallProtein_SEC_byfraction.xlsx"
+)
+
+# -----------------------------
+# 1) Read featureCounts files
+# -----------------------------
+rna_unfiltered_raw <- read.delim(rna_unfiltered_file,
+                                 comment.char = "#",
+                                 check.names = FALSE)
+
+rna_filtered_raw <- read.delim(rna_filtered_file,
+                               comment.char = "#",
+                               check.names = FALSE)
+
+rna_unfiltered <- rna_unfiltered_raw %>%
+  dplyr::select(Geneid, starts_with("run_bulkRNA/")) %>%
+  mutate(across(-Geneid, as.numeric)) %>%
+  tibble::column_to_rownames("Geneid")
+
+rna_filtered <- rna_filtered_raw %>%
+  dplyr::select(Geneid, starts_with("run_bulkRNA/")) %>%
+  mutate(across(-Geneid, as.numeric)) %>%
+  tibble::column_to_rownames("Geneid")
+
+map_ensembl_to_symbol <- function(df) {
+  df <- as.data.frame(df)
+  df$Geneid <- rownames(df)
+
+  df$Symbol <- AnnotationDbi::mapIds(
+    org.Hs.eg.db,
+    keys = df$Geneid,
+    column = "SYMBOL",
+    keytype = "ENSEMBL",
+    multiVals = "first"
+  )
+
+  df <- df %>%
+    filter(!is.na(Symbol)) %>%
+    dplyr::select(Symbol, where(is.numeric)) %>%
+    group_by(Symbol) %>%
+    summarise(across(where(is.numeric), sum), .groups = "drop")
+
+  tibble::column_to_rownames(df, "Symbol")
+}
+
+rna_unfiltered_sym <- map_ensembl_to_symbol(rna_unfiltered)
+rna_filtered_sym   <- map_ensembl_to_symbol(rna_filtered)
+
+# -----------------------------
+# 2) Read one proteomics file
+# -----------------------------
+read_proteomics_file <- function(path) {
+  prot_raw <- read_xlsx(path)
+  names(prot_raw) <- make.names(names(prot_raw))
+
+  if (!"Description" %in% names(prot_raw)) {
+    stop("No Description column found in: ", path)
+  }
+
+  prot_raw <- prot_raw %>%
+    mutate(
+      GeneSymbol = str_extract(Description, "GN=[^ ]+") %>%
+        str_remove("^GN=")
+    ) %>%
+    mutate(
+      GeneSymbol = ifelse(is.na(GeneSymbol), NA_character_, GeneSymbol),
+      GeneSymbol = str_split_fixed(GeneSymbol, ",", 2)[, 1]
+    )
+
+  candidate_numeric <- names(prot_raw)[vapply(prot_raw, is.numeric, logical(1))]
+
+  preferred_cols <- grep(
+    "intensity|lfq|abundance|area|quant|signal|psm",
+    candidate_numeric,
+    ignore.case = TRUE,
+    value = TRUE
+  )
+
+  if (length(preferred_cols) > 0) {
+    prot_value_col <- preferred_cols[1]
+  } else if ("X..PSMs" %in% names(prot_raw)) {
+    prot_value_col <- "X..PSMs"
+  } else if ("PSMs" %in% names(prot_raw)) {
+    prot_value_col <- "PSMs"
+  } else {
+    stop("No usable quantitative proteomics column found in: ", path)
+  }
+
+  message("Using proteomics numeric column for ", basename(path), ": ", prot_value_col)
+
+  prot <- prot_raw %>%
+    dplyr::select(GeneSymbol, all_of(prot_value_col)) %>%
+    filter(!is.na(GeneSymbol), GeneSymbol != "") %>%
+    mutate(across(all_of(prot_value_col), as.numeric)) %>%
+    group_by(GeneSymbol) %>%
+    summarise(value = mean(.data[[prot_value_col]], na.rm = TRUE), .groups = "drop") %>%
+    tibble::column_to_rownames("GeneSymbol")
+
+  log2(as.matrix(prot) + 1)
+}
+
+# -----------------------------
+# 3) Correlation function
+# -----------------------------
+calc_cor <- function(rna_data, prot_data, method_name) {
+  common_genes <- intersect(rownames(rna_data), rownames(prot_data))
+
+  if (length(common_genes) == 0) {
+    message("No overlapping genes for: ", method_name)
+    return(tibble(method = character(), sample = character(),
+                  pearson = numeric(), spearman = numeric()))
+  }
+
+  rna <- rna_data[common_genes, , drop = FALSE]
+  prot_vec <- prot_data[common_genes, 1, drop = TRUE]
+
+  map_dfr(colnames(rna), function(s) {
+    tibble(
+      method = method_name,
+      sample = s,
+      pearson = cor(rna[, s], prot_vec, use = "complete.obs", method = "pearson"),
+      spearman = cor(rna[, s], prot_vec, use = "complete.obs", method = "spearman")
+    )
+  })
+}
+
+# -----------------------------
+# 4) Run for each proteomics file
+# -----------------------------
+all_results <- map_dfr(names(prot_files), function(prot_name) {
+  prot_log <- read_proteomics_file(prot_files[[prot_name]])
+
+  bind_rows(
+    calc_cor(rna_unfiltered_sym, prot_log, "Unfiltered"),
+    calc_cor(rna_filtered_sym,   prot_log, "Filtered")
+  ) %>%
+    mutate(proteomics = prot_name)
+})
+
+print(all_results)
+
+write.csv(all_results, "rna_vs_proteomics_all_methods.csv", row.names = FALSE)
+
+# -----------------------------
+# 5) Clean sample labels
+# -----------------------------
+all_results <- all_results %>%
+  mutate(
+    sample_short = case_when(
+      str_detect(sample, "RD_1") ~ "RD1",
+      str_detect(sample, "RD_2") ~ "RD2",
+      str_detect(sample, "RD_3") ~ "RD3",
+      str_detect(sample, "RH30_1") ~ "RH30_1",
+      str_detect(sample, "RH30_2") ~ "RH30_2",
+      str_detect(sample, "RH30_3") ~ "RH30_3",
+      TRUE ~ sample
+    ),
+    sample_short = factor(sample_short,
+                          levels = c("RD1", "RD2", "RD3", "RH30_1", "RH30_2", "RH30_3"))
+  )
+
+# -----------------------------
+# 6) Summary: which proteomics file correlates the most?
+# -----------------------------
+summary_by_file <- all_results %>%
+  group_by(proteomics, method) %>%
+  summarise(
+    mean_pearson = mean(pearson, na.rm = TRUE),
+    sd_pearson   = sd(pearson, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+print(summary_by_file)
+
+best_file <- summary_by_file %>%
+  group_by(proteomics) %>%
+  summarise(overall_mean_pearson = mean(mean_pearson, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(overall_mean_pearson))
+
+print(best_file)
+
+# -----------------------------
+# 7) Presentation-friendly plots
+# -----------------------------
+p1 <- ggplot(all_results, aes(x = sample_short, y = pearson, color = proteomics, group = proteomics)) +
+  geom_point(size = 3, position = position_dodge(width = 0.25)) +
+  geom_line(position = position_dodge(width = 0.25)) +
+  facet_wrap(~method) +
+  coord_cartesian(ylim = c(0, max(all_results$pearson, na.rm = TRUE) + 0.05)) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "RNA vs Proteomics Correlation",
+    x = "Sample",
+    y = "Pearson correlation",
+    color = "Proteomics file"
+  )
+
+print(p1)
+
+p2 <- ggplot(summary_by_file, aes(x = proteomics, y = mean_pearson, fill = method)) +
+  geom_col(position = "dodge", width = 0.7) +
+  geom_errorbar(
+    aes(ymin = mean_pearson - sd_pearson, ymax = mean_pearson + sd_pearson),
+    position = position_dodge(width = 0.7),
+    width = 0.15
+  ) +
+  coord_cartesian(ylim = c(0, max(summary_by_file$mean_pearson + summary_by_file$sd_pearson, na.rm = TRUE) + 0.05)) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Which proteomics file matches RNA best?",
+    x = "Proteomics file",
+    y = "Mean Pearson correlation",
+    fill = "RNA method"
+  )
+
+print(p2)
+
+# -----------------------------
+# 8) Save figures
+# -----------------------------
+ggsave("rna_vs_proteomics_by_file.png", p1, width = 11, height = 6, dpi = 300)
+ggsave("proteomics_file_comparison.png", p2, width = 8, height = 5, dpi = 300)
+
+p2 <- ggplot(summary_by_file, aes(x = proteomics, y = mean_pearson, fill = method)) +
+  geom_col(position = "dodge", width = 0.7) +
+  geom_errorbar(
+    aes(ymin = mean_pearson - sd_pearson, ymax = mean_pearson + sd_pearson),
+    position = position_dodge(width = 0.7),
+    width = 0.15
+  ) +
+  coord_cartesian(ylim = c(0, max(summary_by_file$mean_pearson + summary_by_file$sd_pearson, na.rm = TRUE) + 0.05)) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Which proteomics file matches RNA best?",
+    x = "Proteomics file",
+    y = "Mean Pearson correlation",
+    fill = "RNA method"
+  )
+
+print(p2)
+
+# -----------------------------
+# 8) Save figures
+# -----------------------------
+ggsave("rna_vs_proteomics_by_file.png", p1, width = 11, height = 6, dpi = 300)
+ggsave("proteomics_file_comparison.png", p2, width = 8, height = 5, dpi = 300)
+```
+
+### Run Feature Counts vs. Proteomics Configuration File
+
+The pipeline must be run using sbatch on the Biowulf cluster.
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+Rscript proteomics.r
 ```
 
 
