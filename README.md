@@ -889,7 +889,148 @@ cd /data/mckeeka/bulkRNA_RMS
 sbatch --cpus-per-task=4 --mem=64G --time=01-00:00:00 --wrap "snakemake -s STARmap_pipeline_filtered.smk --cores 4"
 ```
 
-## Create Read Counts QC Pipeline Working Directory
+## Generate STAR QC Pipeline Configuration
+
+This pipeline was generated to analyze the quality of STAR mapping on our unfiltered samples.
+
+### Install STAR QC Tools
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+conda create -n STAR_QC -c conda-forge -c bioconda snakemake python=3.10 -y
+conda activate STAR_QC
+```
+
+### Create Snakemake STAR QC Configuration File
+
+```bash
+nano STAR_QC.py
+
+
+# Add the following code to the configuration file:
+
+import csv
+import glob
+import os
+
+STAR_LOG_DIR = "run_bulkRNA/STAR_new"
+OUT_CSV = "run_bulkRNA/STAR_new/star_qc_summary.csv"
+
+def parse_log_final_out(path):
+    # Example filename: RD_1.Log.final.out -> RD_1
+    sample = os.path.basename(path).replace(".Log.final.out", "")
+    metrics = {"sample": sample}
+
+    with open(path) as f:
+        for line in f:
+            if "|" not in line:
+                continue
+            key, val = line.split("|", 1)
+            key = key.strip()
+            val = val.strip()
+            metrics[key] = val
+
+    return metrics
+
+logs = glob.glob(os.path.join(STAR_LOG_DIR, "*.Log.final.out"))
+rows = [parse_log_final_out(p) for p in logs]
+
+if not rows:
+    raise SystemExit(f"No STAR log files found in {STAR_LOG_DIR}")
+
+all_keys = sorted({k for row in rows for k in row.keys()})
+os.makedirs(os.path.dirname(OUT_CSV), exist_ok=True)
+
+with open(OUT_CSV, "w", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=all_keys)
+    writer.writeheader()
+    writer.writerows(rows)
+
+print(f"Wrote {OUT_CSV}")
+
+```
+
+### Run STAR QC Configuration File
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+python STAR_QC.py
+```
+
+## Generate Filtered STAR QC Pipeline Configuration
+
+This pipeline was generated to analyze the quality of STAR mapping on our filtered samples.
+
+### Create Snakemake STAR QC Configuration File
+
+```bash
+conda activate STAR_QC
+
+cd /data/mckeeka/bulkRNA_RMS
+nano STAR_QC_filtered.py
+
+
+# Add the following code to the configuration file:
+
+import csv
+import glob
+import os
+
+STAR_LOG_DIR = "run_bulkRNA/STAR_filtered"
+OUT_CSV = "run_bulkRNA/STAR_filtered/star_qc_summary.csv"
+
+def parse_log_final_out(path):
+    # Example filename: RD_1.Log.final.out -> RD_1
+    sample = os.path.basename(path).replace(".Log.final.out", "")
+    metrics = {"sample": sample}
+
+    with open(path) as f:
+        for line in f:
+            if "|" not in line:
+                continue
+            key, val = line.split("|", 1)
+            key = key.strip()
+            val = val.strip()
+            metrics[key] = val
+
+    return metrics
+
+logs = glob.glob(os.path.join(STAR_LOG_DIR, "*.Log.final.out"))
+rows = [parse_log_final_out(p) for p in logs]
+
+if not rows:
+    raise SystemExit(f"No STAR log files found in {STAR_LOG_DIR}")
+
+all_keys = sorted({k for row in rows for k in row.keys()})
+os.makedirs(os.path.dirname(OUT_CSV), exist_ok=True)
+
+with open(OUT_CSV, "w", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=all_keys)
+    writer.writeheader()
+    writer.writerows(rows)
+
+print(f"Wrote {OUT_CSV}")
+
+```
+
+### Run STAR QC Configuration File
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+python STAR_QC_filtered.py
+```
+
+### Run Feature Counts Configuration File
+
+The pipeline must be run using sbatch on the Biowulf cluster.
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+sbatch --cpus-per-task=6 --time=01:00:00 --wrap "snakemake -s FeatureCounts_pipeline.smk --cores 6"
+```
+
+
+## Create FeatureCounts Pipeline Working Directory
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
