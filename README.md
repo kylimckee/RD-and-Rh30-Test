@@ -1020,15 +1020,6 @@ cd /data/mckeeka/bulkRNA_RMS
 python STAR_QC_filtered.py
 ```
 
-### Run Feature Counts Configuration File
-
-The pipeline must be run using sbatch on the Biowulf cluster.
-
-```bash
-cd /data/mckeeka/bulkRNA_RMS
-sbatch --cpus-per-task=6 --time=01:00:00 --wrap "snakemake -s FeatureCounts_pipeline.smk --cores 6"
-```
-
 
 ## Create FeatureCounts Pipeline Working Directory
 
@@ -1039,7 +1030,7 @@ mkdir FeatureCounts
 
 ## Generate Feature Counts Pipeline Configuration
 
-This pipeline was generated to count the reads that were filtered out of each step of the Clean FASTQ pipeline.
+This pipeline was generated to count the features after STAR two-pass mapping on the unfiltered samples.
 
 ### Install Feature Counts Tools
 
@@ -1104,30 +1095,68 @@ cd /data/mckeeka/bulkRNA_RMS
 sbatch --cpus-per-task=6 --time=01:00:00 --wrap "snakemake -s FeatureCounts_pipeline.smk --cores 6"
 ```
 
-## Create Indexing Pipeline Working Directory
+## Generate Feature Counts Filtered Pipeline Configuration
 
-The pipeline requires a working directory where the FASTQ files and reference transcriptome can be accessed. 
+This pipeline was generated to count the features after STAR two-pass mapping on the filtered samples.
 
-```bash
-mkdir run_bulkRNA
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
+### Install Feature Counts Tools
 
-ln -s /data/mckeeka/bulkRNA_sarcoma/MCI_fastq_117_STS_FASTQ/
-ln -s /data/mckeeka/bulkRNA_sarcoma/reference/
-```
-
-## Generate Pipeline Configuration
-
-The pipeline requires a working directory where the FASTQ files and reference transcriptome can be accessed. You can symlink these files instead 
-of copying them into the pipeline directory to prevent the duplication of large data files in your directory.
+### Create Snakemake Feature Counts Filtered Configuration File
 
 ```bash
-mkdir run_bulkRNA
-cd /data/mckeeka/bulkRNA_sarcoma/run_bulkRNA
+conda activate FeatureCounts
+nano FeatureCounts_filtered_pipeline.smk
 
-ln -s /data/mckeeka/bulkRNA_sarcoma/MCI_fastq_117_STS_FASTQ/
-ln -s /data/mckeeka/bulkRNA_sarcoma/reference/
+# Add the following code to the configuration file:
+
+from pathlib import Path
+from glob import glob
+
+GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
+BAM_DIR = "run_bulkRNA/STAR_filtered"
+COUNT_DIR = "run_bulkRNA/FeatureCounts"
+
+SAMPLES = sorted(
+    Path(b).name.replace(".Aligned.sortedByCoord.out.bam", "")
+    for b in glob(f"{BAM_DIR}/*.Aligned.sortedByCoord.out.bam")
+)
+
+rule all:
+    input:
+        f"{COUNT_DIR}/gene_counts.txt"
+        
+rule featurecounts:
+    input:
+        bams=lambda wildcards: expand(
+            f"{BAM_DIR}" + "/{sample}.Aligned.sortedByCoord.out.bam",
+            sample=SAMPLES
+        ),
+        gtf=GTF
+    output:
+        counts=f"{COUNT_DIR}/gene_counts.txt"
+    threads: 6
+    shell:
+        """
+        featureCounts \
+            -T {threads} \
+            -a {input.gtf} \
+            -o {output.counts} \
+            -p \
+            -B \
+            -C \
+            {input.bams}
+        """
 ```
+
+### Run Feature Counts Filtered Configuration File
+
+The pipeline must be run using sbatch on the Biowulf cluster.
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+sbatch --cpus-per-task=6 --time=01:00:00 --wrap "snakemake -s FeatureCounts_filtered_pipeline.smk --cores 6"
+```
+
 
 
 
