@@ -1646,8 +1646,167 @@ cd /data/mckeeka/bulkRNA_RMS
 Rscript proteomics.r
 ```
 
+cd /data/mckeeka/bulkRNA_RMS
+conda create -n Microproteins -c conda-forge -c bioconda snakemake gffread transdecoder r-base python=3.10 -y
+conda activate Microproteins
+
+nano Microproteins.smk
+
+MIN_MICROPROTEIN_AA = 100
+GENOME_FASTA = "reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
+GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
+COUNTS = "run_bulkRNA/FeatureCounts/gene_counts_filtered.txt"
+OUT_DIR = "run_bulkRNA/Microproteins"
+
+rule all:
+    input:
+        f"{OUT_DIR}/orf/transcripts.fa",
+        f"{OUT_DIR}/orf/transcripts.fa.transdecoder.pep",
+        f"{OUT_DIR}/orf/transcripts.fa.transdecoder.gff3",
+        f"{OUT_DIR}/orf/transcripts.fa.transdecoder.cds",
+        f"{OUT_DIR}/orf/orf_metadata.tsv",
+        f"{OUT_DIR}/orf/microproteins.tsv",
+        f"{OUT_DIR}/qc/library_sizes.pdf",
+        f"{OUT_DIR}/qc/count_distribution.pdf"
+
+rule extract_transcripts:
+    input:
+        genome=GENOME_FASTA,
+        gtf=GTF
+    output:
+        fa=f"{OUT_DIR}/orf/transcripts.fa"
+    shell:
+        """
+        mkdir -p {OUT_DIR}/orf
+        gffread {input.gtf} -g {input.genome} -w {output.fa}
+        """
+
+rule transdecoder_longorfs:
+    input:
+        fa=f"{OUT_DIR}/orf/transcripts.fa"
+    output:
+        flag=f"{OUT_DIR}/orf/.longorfs.done"
+    shell:
+        """
+        cd {OUT_DIR}/orf
+        TransDecoder.LongOrfs -t transcripts.fa
+        touch .longorfs.done
+        """
+
+rule transdecoder_predict:
+    input:
+        fa=f"{OUT_DIR}/orf/transcripts.fa",
+        flag=f"{OUT_DIR}/orf/.longorfs.done"
+    output:
+        pep=f"{OUT_DIR}/orf/transcripts.fa.transdecoder.pep",
+        gff3=f"{OUT_DIR}/orf/transcripts.fa.transdecoder.gff3",
+        cds=f"{OUT_DIR}/orf/transcripts.fa.transdecoder.cds"
+    shell:
+        """
+        cd {OUT_DIR}/orf
+        TransDecoder.Predict -t transcripts.fa
+        """
+
+rule build_orf_metadata:
+    input:
+        pep=f"{OUT_DIR}/orf/transcripts.fa.transdecoder.pep"
+    output:
+        tsv=f"{OUT_DIR}/orf/orf_metadata.tsv"
+    run:
+        import re
+
+        def parse_fasta(path):
+            header = None
+            seq_parts = []
+            with open(path) as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith(">"):
+                        if header is not None:
+                            yield header, "".join(seq_parts)
+                        header = line[1:]
+                        seq_parts = []
+                    else:
+                        seq_parts.append(line)
+                if header is not None:
+                    yield header, "".join(seq_parts)
+
+        with open(output.tsv, "w") as out:
+            out.write("orf_id\ttranscript_id\tlength_aa\tsequence\tcategory\n")
+            for header, seq in parse_fasta(input.pep):
+                orf_id = header.split()[0]
+
+                # Try to recover transcript ID from TransDecoder-style headers
+                transcript_id = orf_id
+                if ".p" in orf_id:
+                    transcript_id = orf_id.rsplit(".p", 1)[0]
+
+                m = re.search(r"len=(\d+)", header)
+                length_aa = int(m.group(1)) if m else len(seq)
+                category = "microprotein" if length_aa < MIN_MICROPROTEIN_AA else "protein"
+
+                out.write(f"{orf_id}\t{transcript_id}\t{length_aa}\t{seq}\t{category}\n")
+
+rule split_microproteins:
+    input:
+        tsv=f"{OUT_DIR}/orf/orf_metadata.tsv"
+    output:
+        tsv=f"{OUT_DIR}/orf/microproteins.tsv"
+    run:
+        import csv
+
+        with open(input.tsv) as inf, open(output.tsv, "w", newline="") as outf:
+            reader = csv.DictReader(inf, delimiter="\t")
+            writer = csv.DictWriter(outf, fieldnames=reader.fieldnames, delimiter="\t")
+            writer.writeheader()
+            for row in reader:
+                if row["category"] == "microprotein":
+                    writer.writerow(row)
+
+rule count_qc_plots:
+    input:
+        counts=COUNTS
+    output:
+        lib=f"{OUT_DIR}/qc/library_sizes.pdf",
+        dist=f"{OUT_DIR}/qc/count_distribution.pdf"
+    shell:
+        """
+        mkdir -p {OUT_DIR}/qc
+        Rscript -e '
+          counts <- read.delim("{input.counts}", check.names = FALSE)
+
+          # Remove featureCounts annotation columns if present
+          annotation_cols <- c("Geneid", "Chr", "Start", "End", "Strand", "Length")
+          sample_counts <- counts[, !(names(counts) %in% annotation_cols), drop = FALSE]
+
+          # If Geneid is present, set it as row names
+          if ("Geneid" %in% names(counts)) {
+            rownames(sample_counts) <- counts$Geneid
+          }
+
+          # Make sure everything is numeric
+          sample_counts <- as.data.frame(lapply(sample_counts, as.numeric))
+          rownames(sample_counts) <- if ("Geneid" %in% names(counts)) counts$Geneid else rownames(counts)
+
+          pdf("{output.lib}")
+          barplot(colSums(sample_counts, na.rm = TRUE),
+                  las = 2,
+                  main = "Library sizes",
+                  ylab = "Total counts")
+          dev.off()
+
+          pdf("{output.dist}")
+          boxplot(log2(sample_counts + 1),
+                  las = 2,
+                  main = "Log2 count distribution",
+                  ylab = "log2(counts + 1)")
+          dev.off()
+        '
+        """
 
 
 
-
+sbatch --time=00-04:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins.smk --cores 8"
 
