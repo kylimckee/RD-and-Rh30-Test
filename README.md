@@ -1648,13 +1648,15 @@ Rscript proteomics.r
 
 ### Install Microproteins Tools
 
+```bash
 cd /data/mckeeka/bulkRNA_RMS
 conda create -n Microproteins -c conda-forge -c bioconda snakemake gffread transdecoder r-base python=3.10 -y
 conda activate Microproteins
-
+```
 
 ### Create Microproteins Configuration File
 
+```bash
 nano Microproteins.smk
 
 MIN_MICROPROTEIN_AA = 100
@@ -1816,11 +1818,12 @@ rule count_qc_plots:
           dev.off()
         '
         """
-
+```
 
 ### Run Microproteins Configuration File
 
 The pipeline must be run using sbatch on the Biowulf cluster.
 
+```bash
 sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins.smk --cores 8"
-
+```
