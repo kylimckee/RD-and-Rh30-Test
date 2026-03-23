@@ -1646,9 +1646,14 @@ cd /data/mckeeka/bulkRNA_RMS
 Rscript proteomics.r
 ```
 
+### Install Microproteins Tools
+
 cd /data/mckeeka/bulkRNA_RMS
 conda create -n Microproteins -c conda-forge -c bioconda snakemake gffread transdecoder r-base python=3.10 -y
 conda activate Microproteins
+
+
+### Create Microproteins Configuration File
 
 nano Microproteins.smk
 
@@ -1767,26 +1772,32 @@ rule split_microproteins:
 
 rule count_qc_plots:
     input:
-        counts=COUNTS
+        counts="run_bulkRNA/FeatureCounts/gene_counts_filtered.txt"
     output:
-        lib=f"{OUT_DIR}/qc/library_sizes.pdf",
-        dist=f"{OUT_DIR}/qc/count_distribution.pdf"
+        lib="run_bulkRNA/Microproteins/qc/library_sizes.pdf",
+        dist="run_bulkRNA/Microproteins/qc/count_distribution.pdf"
     shell:
-        """
-        mkdir -p {OUT_DIR}/qc
+        r"""
+        mkdir -p run_bulkRNA/Microproteins/qc
         Rscript -e '
-          counts <- read.delim("{input.counts}", check.names = FALSE)
+          counts <- read.delim(
+            "{input.counts}",
+            header = TRUE,
+            sep = "\t",
+            comment.char = "#",
+            check.names = FALSE,
+            fill = TRUE,
+            quote = "",
+            stringsAsFactors = FALSE
+          )
 
-          # Remove featureCounts annotation columns if present
           annotation_cols <- c("Geneid", "Chr", "Start", "End", "Strand", "Length")
           sample_counts <- counts[, !(names(counts) %in% annotation_cols), drop = FALSE]
 
-          # If Geneid is present, set it as row names
-          if ("Geneid" %in% names(counts)) {
+          if ("Geneid" %in% names(counts)) {{
             rownames(sample_counts) <- counts$Geneid
-          }
+          }}
 
-          # Make sure everything is numeric
           sample_counts <- as.data.frame(lapply(sample_counts, as.numeric))
           rownames(sample_counts) <- if ("Geneid" %in% names(counts)) counts$Geneid else rownames(counts)
 
@@ -1807,6 +1818,9 @@ rule count_qc_plots:
         """
 
 
+### Run Microproteins Configuration File
 
-sbatch --time=00-04:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins.smk --cores 8"
+The pipeline must be run using sbatch on the Biowulf cluster.
+
+sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins.smk --cores 8"
 
