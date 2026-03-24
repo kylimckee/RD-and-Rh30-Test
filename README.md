@@ -1863,7 +1863,7 @@ gtf_file  <- "reference/Homo_sapiens.GRCh38.115.gtf"
 diamond_db <- "reference/uniprot_full.dmnd"     
 out_prefix <- "smorf_results"
 
-max_aa_len <- 300
+max_aa_len <- 100
 diamond_evalue <- "1e-5"
 diamond_max_hits <- 5
 
@@ -1929,13 +1929,11 @@ map_tx_interval_to_genome <- function(tx_start, tx_end, exons_df) {
     ))
   }
 
-  strand <- unique(exons_df$strand)
-  chrom <- unique(as.character(exons_df$seqnames))
-  strand <- strand[1]
-  chrom <- chrom[1]
-
-  # Sort exons in transcript order
   exons_df <- as.data.table(exons_df)
+
+  strand <- as.character(unique(exons_df$strand))[1]
+  chrom  <- as.character(unique(exons_df$seqnames))[1]
+
   if (strand == "+") {
     setorder(exons_df, start, end)
   } else {
@@ -1966,18 +1964,15 @@ map_tx_interval_to_genome <- function(tx_start, tx_end, exons_df) {
       chrom = chrom,
       genomic_start = NA_integer_,
       genomic_end = NA_integer_,
-      strand = strand
+      strand = as.character(strand)
     ))
   }
 
-  gs <- min(g1, g2)
-  ge <- max(g1, g2)
-
   list(
     chrom = chrom,
-    genomic_start = gs,
-    genomic_end = ge,
-    strand = strand
+    genomic_start = min(g1, g2),
+    genomic_end = max(g1, g2),
+    strand = as.character(strand)
   )
 }
 
@@ -2029,7 +2024,7 @@ meta <- rbindlist(lapply(hdrs, parse_transdecoder_header), fill = TRUE)
 meta[, aa_len := aa_len]
 
 # Keep only ORFs under threshold
-keep_idx <- aa_len < max_aa_len
+keep_idx <- aa_len <= max_aa_len
 pep_smorf <- pep[keep_idx]
 meta_smorf <- meta[keep_idx]
 
@@ -2268,3 +2263,443 @@ if (!is.null(best_hits_dt) && nrow(best_hits_dt) > 0) {
 sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=12:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="Rscript Microproteins_Novel.r"
 
 sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=12:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; echo ENV_OK; Rscript Microproteins_Novel.r; echo DONE $(date)"
+
+###Second filtering
+
+conda activate smorf
+
+cd /data/mckeeka/bulkRNA_RMS
+nano Microproteins_Novel_new.r
+
+suppressPackageStartupMessages({
+  library(Biostrings)
+  library(data.table)
+  library(stringr)
+  library(rtracklayer)
+})
+
+# =========================
+# User inputs
+# =========================
+
+pep_fasta    <- "run_bulkRNA/Microproteins/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
+gtf_file     <- "reference/Homo_sapiens.GRCh38.115.gtf"
+
+out_prefix   <- "smorf_results"
+max_aa_len   <- 100
+
+diamond_evalue    <- "1e-5"
+diamond_max_hits   <- 5
+
+# DIAMOND databases
+uniprot_full_db <- "reference/uniprot_full.dmnd"
+sprot_db        <- "reference/uniprot_sprot.dmnd"
+openprot_db     <- "reference/openprot_human.dmnd"
+smprot_db       <- "reference/smprot2_human_ribo.dmnd"
+
+# =========================
+# Helper functions
+# =========================
+
+parse_transdecoder_header <- function(hdr) {
+  # Example:
+  # ENST00000832824.p1 type:complete gc:universal ENST00000832824:764-345(-)
+
+  first_token <- sub(" .*", "", hdr)
+
+  tx_orf <- first_token
+  tx_id <- sub("\\.p[0-9]+$", "", tx_orf)
+  orf_id <- tx_orf
+
+  coord_str <- NA_character_
+  if (grepl(":[0-9]+-[0-9]+\\([+-]\\)$", hdr)) {
+    coord_str <- sub(".* ([^ ]+:[0-9]+-[0-9]+\\([+-]\\))$", "\\1", hdr)
+  }
+
+  transcript_id_from_coord <- NA_character_
+  tx_start <- NA_integer_
+  tx_end <- NA_integer_
+  strand <- NA_character_
+
+  if (!is.na(coord_str)) {
+    m <- str_match(coord_str, "^(.+):([0-9]+)-([0-9]+)\\(([+-])\\)$")
+    transcript_id_from_coord <- m[, 2]
+    tx_start <- suppressWarnings(as.integer(m[, 3]))
+    tx_end <- suppressWarnings(as.integer(m[, 4]))
+    strand <- m[, 5]
+  }
+
+  data.table(
+    header = hdr,
+    orf_id = orf_id,
+    tx_id = tx_id,
+    tx_id_from_coord = transcript_id_from_coord,
+    tx_start = tx_start,
+    tx_end = tx_end,
+    strand = strand
+  )
+}
+
+clean_interval <- function(a, b) {
+  c(min(a, b), max(a, b))
+}
+
+map_tx_interval_to_genome <- function(tx_start, tx_end, exons_df) {
+  if (nrow(exons_df) == 0 || any(is.na(c(tx_start, tx_end)))) {
+    return(list(
+      chrom = NA_character_,
+      genomic_start = NA_integer_,
+      genomic_end = NA_integer_,
+      strand = NA_character_
+    ))
+  }
+
+  exons_df <- as.data.table(exons_df)
+
+  strand <- unique(exons_df$strand)
+  chrom <- unique(as.character(exons_df$seqnames))
+  strand <- strand[1]
+  chrom <- chrom[1]
+
+  if (strand == "+") {
+    setorder(exons_df, start, end)
+  } else {
+    setorder(exons_df, -start, -end)
+  }
+
+  exons_df[, exon_len := end - start + 1L]
+  exons_df[, tx_exon_start := cumsum(c(0L, head(exon_len, -1L))) + 1L]
+  exons_df[, tx_exon_end := cumsum(exon_len)]
+
+  map_one_pos <- function(tx_pos) {
+    hit <- exons_df[tx_exon_start <= tx_pos & tx_exon_end >= tx_pos][1]
+    if (nrow(hit) == 0) return(NA_integer_)
+
+    offset <- tx_pos - hit$tx_exon_start
+    if (strand == "+") {
+      hit$start + offset
+    } else {
+      hit$end - offset
+    }
+  }
+
+  g1 <- map_one_pos(tx_start)
+  g2 <- map_one_pos(tx_end)
+
+  if (is.na(g1) || is.na(g2)) {
+    return(list(
+      chrom = chrom,
+      genomic_start = NA_integer_,
+      genomic_end = NA_integer_,
+      strand = strand
+    ))
+  }
+
+  list(
+    chrom = chrom,
+    genomic_start = min(g1, g2),
+    genomic_end = max(g1, g2),
+    strand = strand
+  )
+}
+
+run_diamond <- function(query_fa, db, out_tsv, evalue = "1e-5", max_hits = 5) {
+  diamond_cmd <- c(
+    "blastp",
+    "-q", query_fa,
+    "-d", db,
+    "-o", out_tsv,
+    "-e", evalue,
+    "-k", as.character(max_hits),
+    "--quiet",
+    "--outfmt", "6",
+    "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+    "qstart", "qend", "sstart", "send", "evalue", "bitscore", "qlen", "slen"
+  )
+
+  message("Running DIAMOND against: ", db)
+  status <- system2("diamond", diamond_cmd)
+  if (!identical(status, 0L)) {
+    warning("DIAMOND returned non-zero exit status for: ", db)
+  }
+}
+
+read_best_hits <- function(tsv_file, db_name) {
+  if (!file.exists(tsv_file) || file.info(tsv_file)$size == 0) return(NULL)
+
+  hits <- fread(tsv_file, header = FALSE)
+  setnames(hits, c(
+    "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+    "qstart", "qend", "sstart", "send", "evalue", "bitscore", "qlen", "slen"
+  ))
+
+  hits[, `:=`(
+    pident = as.numeric(pident),
+    length = as.numeric(length),
+    evalue = as.numeric(evalue),
+    bitscore = as.numeric(bitscore),
+    qlen = as.numeric(qlen),
+    slen = as.numeric(slen)
+  )]
+
+  hits[, `:=`(
+    qcov = length / qlen,
+    scov = length / slen,
+    db = db_name
+  )]
+
+  # Best hit = lowest evalue, then highest bitscore, then highest identity, then highest qcov
+  setorder(hits, qseqid, evalue, -bitscore, -pident, -qcov)
+  hits[, .SD[1], by = qseqid]
+}
+
+# =========================
+# Read and filter peptides
+# =========================
+
+pep <- readAAStringSet(pep_fasta)
+hdrs <- names(pep)
+aa_len <- width(pep)
+
+meta <- rbindlist(lapply(hdrs, parse_transdecoder_header), fill = TRUE)
+meta[, aa_len := aa_len]
+
+# Keep only ORFs below the threshold
+keep_idx <- aa_len < max_aa_len
+pep_smorf <- pep[keep_idx]
+meta_smorf <- meta[keep_idx]
+
+# Write filtered peptide FASTA
+smorf_pep_fa <- paste0(out_prefix, ".smorfs_lt", max_aa_len, "aa.pep.fa")
+names(pep_smorf) <- meta_smorf$orf_id
+writeXStringSet(pep_smorf, smorf_pep_fa)
+
+# =========================
+# DIAMOND searches
+# =========================
+
+openprot_tsv <- paste0(out_prefix, ".openprot.tsv")
+smprot_tsv   <- paste0(out_prefix, ".smprot.tsv")
+sprot_tsv    <- paste0(out_prefix, ".uniprot_sprot.tsv")
+uniprot_tsv  <- paste0(out_prefix, ".uniprot_full.tsv")
+
+run_diamond(smorf_pep_fa, openprot_db, openprot_tsv, evalue = diamond_evalue, max_hits = diamond_max_hits)
+run_diamond(smorf_pep_fa, smprot_db,   smprot_tsv,   evalue = diamond_evalue, max_hits = diamond_max_hits)
+run_diamond(smorf_pep_fa, sprot_db,    sprot_tsv,    evalue = diamond_evalue, max_hits = diamond_max_hits)
+run_diamond(smorf_pep_fa, uniprot_full_db, uniprot_tsv, evalue = diamond_evalue, max_hits = diamond_max_hits)
+
+openprot_best <- read_best_hits(openprot_tsv, "openprot")
+smprot_best   <- read_best_hits(smprot_tsv,   "smprot")
+sprot_best    <- read_best_hits(sprot_tsv,    "sprot")
+uniprot_best  <- read_best_hits(uniprot_tsv,  "uniprot_full")
+
+# =========================
+# GTF processing
+# =========================
+
+tx_anno <- NULL
+tx_exons <- NULL
+
+if (!is.null(gtf_file) && file.exists(gtf_file)) {
+  message("Reading GTF...")
+  gtf <- import(gtf_file)
+  gtf_df <- as.data.frame(gtf)
+  rm(gtf)
+  gc()
+
+  if (!("transcript_id" %in% names(gtf_df))) {
+    stop("GTF does not contain a transcript_id column in metadata.")
+  }
+
+  anno_cols <- intersect(
+    c("transcript_id", "gene_id", "gene_name", "gene_type", "transcript_type", "biotype"),
+    names(gtf_df)
+  )
+
+  if (length(anno_cols) > 0) {
+    tx_anno <- unique(gtf_df[, anno_cols, drop = FALSE])
+  }
+
+  exons_only <- gtf_df[gtf_df$type == "exon", , drop = FALSE]
+
+  if (nrow(exons_only) > 0) {
+    exons_only <- exons_only[, intersect(
+      c("seqnames", "start", "end", "strand", "transcript_id"),
+      names(exons_only)
+    ), drop = FALSE]
+
+    tx_exons <- as.data.table(exons_only)
+    setkey(tx_exons, transcript_id)
+  }
+}
+
+# =========================
+# Build annotation table
+# =========================
+
+smorf_dt <- copy(meta_smorf)
+
+# Use transcript ID from coordinate field if available
+smorf_dt[, transcript_id := fifelse(!is.na(tx_id_from_coord), tx_id_from_coord, tx_id)]
+
+# Initialize columns
+smorf_dt[, `:=`(
+  openprot_hit = NA_character_,
+  openprot_pident = NA_real_,
+  openprot_qcov = NA_real_,
+  openprot_evalue = NA_real_,
+  openprot_bitscore = NA_real_,
+
+  smprot_hit = NA_character_,
+  smprot_pident = NA_real_,
+  smprot_qcov = NA_real_,
+  smprot_evalue = NA_real_,
+  smprot_bitscore = NA_real_,
+
+  sprot_hit = NA_character_,
+  sprot_pident = NA_real_,
+  sprot_qcov = NA_real_,
+  sprot_evalue = NA_real_,
+  sprot_bitscore = NA_real_,
+
+  uniprot_hit = NA_character_,
+  uniprot_pident = NA_real_,
+  uniprot_qcov = NA_real_,
+  uniprot_evalue = NA_real_,
+  uniprot_bitscore = NA_real_,
+
+  genomic_chrom = NA_character_,
+  genomic_start = NA_integer_,
+  genomic_end = NA_integer_,
+  genomic_strand = NA_character_
+)]
+
+# Attach DIAMOND hits by qseqid -> orf_id
+if (!is.null(openprot_best) && nrow(openprot_best) > 0) {
+  smorf_dt[openprot_best, on = c(orf_id = "qseqid"), `:=`(
+    openprot_hit = i.sseqid,
+    openprot_pident = i.pident,
+    openprot_qcov = i.qcov,
+    openprot_evalue = i.evalue,
+    openprot_bitscore = i.bitscore
+  )]
+}
+
+if (!is.null(smprot_best) && nrow(smprot_best) > 0) {
+  smorf_dt[smprot_best, on = c(orf_id = "qseqid"), `:=`(
+    smprot_hit = i.sseqid,
+    smprot_pident = i.pident,
+    smprot_qcov = i.qcov,
+    smprot_evalue = i.evalue,
+    smprot_bitscore = i.bitscore
+  )]
+}
+
+if (!is.null(sprot_best) && nrow(sprot_best) > 0) {
+  smorf_dt[sprot_best, on = c(orf_id = "qseqid"), `:=`(
+    sprot_hit = i.sseqid,
+    sprot_pident = i.pident,
+    sprot_qcov = i.qcov,
+    sprot_evalue = i.evalue,
+    sprot_bitscore = i.bitscore
+  )]
+}
+
+if (!is.null(uniprot_best) && nrow(uniprot_best) > 0) {
+  smorf_dt[uniprot_best, on = c(orf_id = "qseqid"), `:=`(
+    uniprot_hit = i.sseqid,
+    uniprot_pident = i.pident,
+    uniprot_qcov = i.qcov,
+    uniprot_evalue = i.evalue,
+    uniprot_bitscore = i.bitscore
+  )]
+}
+
+# =========================
+# Optional genomic mapping
+# =========================
+
+if (!is.null(tx_exons)) {
+  map_res <- lapply(seq_len(nrow(smorf_dt)), function(i) {
+    tx <- smorf_dt$transcript_id[i]
+    if (is.na(tx) || !(tx %in% tx_exons$transcript_id)) {
+      return(list(
+        chrom = NA_character_,
+        genomic_start = NA_integer_,
+        genomic_end = NA_integer_,
+        strand = NA_character_
+      ))
+    }
+
+    tx_df <- tx_exons[J(tx), nomatch = 0L]
+    tx_df <- as.data.frame(tx_df)
+    tx_df <- tx_df[, intersect(c("seqnames", "start", "end", "strand"), names(tx_df)), drop = FALSE]
+
+    interval <- clean_interval(smorf_dt$tx_start[i], smorf_dt$tx_end[i])
+    map_tx_interval_to_genome(interval[1], interval[2], tx_df)
+  })
+
+smorf_dt[, genomic_chrom := vapply(map_res, function(x) as.character(x$chrom), character(1))]
+smorf_dt[, genomic_start := vapply(map_res, function(x) as.integer(x$genomic_start), integer(1))]
+smorf_dt[, genomic_end := vapply(map_res, function(x) as.integer(x$genomic_end), integer(1))]
+smorf_dt[, genomic_strand := vapply(map_res, function(x) as.character(x$strand), character(1))]
+}
+
+# =========================
+# Classification logic
+# =========================
+
+smorf_dt[, `:=`(
+  hit_in_openprot = !is.na(openprot_hit),
+  hit_in_smprot = !is.na(smprot_hit),
+
+  strong_hit_in_sprot = !is.na(sprot_hit) &
+    !is.na(sprot_evalue) & sprot_evalue <= 1e-20 &
+    !is.na(sprot_pident) & sprot_pident >= 90 &
+    !is.na(sprot_qcov) & sprot_qcov >= 0.80,
+
+  weak_hit_in_uniprot = !is.na(uniprot_hit) &
+    !is.na(uniprot_evalue) & uniprot_evalue <= 1e-5 &
+    !is.na(uniprot_pident) & uniprot_pident >= 30 &
+    !is.na(uniprot_qcov) & uniprot_qcov >= 0.50
+)]
+
+smorf_dt[, class := fifelse(
+  hit_in_openprot | hit_in_smprot,
+  "known_microprotein",
+  fifelse(
+    strong_hit_in_sprot,
+    "known_canonical",
+    fifelse(
+      weak_hit_in_uniprot,
+      "homologous",
+      "novel_candidate"
+    )
+  )
+)]
+
+# =========================
+# Final cleanup / output
+# =========================
+
+# Optional: order columns a little more nicely
+setcolorder(smorf_dt, c(
+  "header", "orf_id", "tx_id", "tx_id_from_coord", "transcript_id",
+  "tx_start", "tx_end", "strand", "aa_len",
+  "genomic_chrom", "genomic_start", "genomic_end", "genomic_strand",
+  "openprot_hit", "openprot_pident", "openprot_qcov", "openprot_evalue", "openprot_bitscore",
+  "smprot_hit", "smprot_pident", "smprot_qcov", "smprot_evalue", "smprot_bitscore",
+  "sprot_hit", "sprot_pident", "sprot_qcov", "sprot_evalue", "sprot_bitscore",
+  "uniprot_hit", "uniprot_pident", "uniprot_qcov", "uniprot_evalue", "uniprot_bitscore",
+  "hit_in_openprot", "hit_in_smprot", "strong_hit_in_sprot", "weak_hit_in_uniprot",
+  "class"
+))
+
+fwrite(
+  smorf_dt,
+  paste0(out_prefix, ".smorf_classification.tsv"),
+  sep = "\t",
+  na = "NA"
+)
+
+message("Done. Wrote: ", paste0(out_prefix, ".smorf_classification.tsv"))
