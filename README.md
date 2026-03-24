@@ -2103,15 +2103,22 @@ tx_anno <- NULL
 tx_exons <- NULL
 
 if (!is.null(gtf_file) && file.exists(gtf_file)) {
-  message("Reading GTF and building transcript exon map...")
+  message("Reading GTF START")
+  flush.console()
+
   gtf <- import(gtf_file)
 
+  message("Reading GTF DONE")
+  flush.console()
+
   gtf_df <- as.data.frame(gtf)
+  rm(gtf)
+  gc()
+
   if (!("transcript_id" %in% names(gtf_df))) {
     stop("GTF does not contain a transcript_id column in metadata.")
   }
 
-  # transcript-level annotation summary if available
   anno_cols <- intersect(
     c("transcript_id", "gene_id", "gene_name", "gene_type", "transcript_type", "biotype"),
     names(gtf_df)
@@ -2121,12 +2128,30 @@ if (!is.null(gtf_file) && file.exists(gtf_file)) {
     tx_anno <- unique(gtf_df[, anno_cols, drop = FALSE])
   }
 
+  message("Filtering exon records START")
+  flush.console()
+
   exons_only <- gtf_df[gtf_df$type == "exon", , drop = FALSE]
+
+  message("Filtering exon records DONE")
+  flush.console()
+
   if (nrow(exons_only) > 0) {
-    tx_exons <- split(exons_only, exons_only$transcript_id)
+    exons_only <- exons_only[, intersect(
+      c("seqnames", "start", "end", "strand", "transcript_id"),
+      names(exons_only)
+    ), drop = FALSE]
+
+    message("Building transcript exon index START")
+    flush.console()
+
+    tx_exons <- as.data.table(exons_only)
+    setkey(tx_exons, transcript_id)
+
+    message("Building transcript exon index DONE")
+    flush.console()
   }
 }
-
 # =========================
 # Build final smORF table
 # =========================
@@ -2154,7 +2179,8 @@ if (!is.null(tx_exons)) {
       ))
     }
 
-    tx_df <- tx_exons[[tx]]
+    tx_df <- tx_exons[J(tx), nomatch = 0L]
+    tx_df <- as.data.frame(tx_df)
     # normalize to a minimal set of columns
     tx_df <- tx_df[, intersect(c("seqnames", "start", "end", "strand"), names(tx_df)), drop = FALSE]
 
