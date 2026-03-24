@@ -1860,7 +1860,7 @@ suppressPackageStartupMessages({
 
 pep_fasta <- "run_bulkRNA/Microproteins/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
 gtf_file  <- "reference/Homo_sapiens.GRCh38.115.gtf" 
-diamond_db <- "reference/uniprot.dmnd"     
+diamond_db <- "reference/uniprot_full.dmnd"     
 out_prefix <- "smorf_results"
 
 max_aa_len <- 300
@@ -2035,6 +2035,7 @@ meta_smorf <- meta[keep_idx]
 
 # Write smORF peptide FASTA
 smorf_pep_fa <- paste0(out_prefix, ".smorfs_lt", max_aa_len, "aa.pep.fa")
+names(pep_smorf) <- meta_smorf$orf_id
 writeXStringSet(pep_smorf, smorf_pep_fa)
 
 # =========================
@@ -2208,9 +2209,9 @@ smorf_dt[, diamond_class := "no_hit"]
 
 if (!is.null(best_hits_dt) && nrow(best_hits_dt) > 0) {
   setkey(best_hits_dt, qseqid)
-  setkey(smorf_dt, header)
+  setkey(smorf_dt, orf_id)
 
-  smorf_dt[best_hits_dt, on = c(header = "qseqid"), `:=`(
+  smorf_dt[best_hits_dt, on = c(orf_id = "qseqid"), `:=`(
     diamond_hit = i.sseqid,
     diamond_pident = i.pident,
     diamond_qcov = i.qcov,
@@ -2218,6 +2219,7 @@ if (!is.null(best_hits_dt) && nrow(best_hits_dt) > 0) {
     diamond_bitscore = i.bitscore
   )]
 
+  
   smorf_dt[, diamond_class := mapply(function(h, pid, qc, ev) {
     if (is.na(h)) return("no_hit")
     if (!is.na(ev) && ev <= 1e-20 && !is.na(pid) && pid >= 90 && !is.na(qc) && qc >= 0.80) {
