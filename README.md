@@ -49,16 +49,13 @@ UUID for Globus Transfer: 25ae9b88-ec49-4de3-803a-1c02546cee80
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/bulkRNA
-for f in *_RD_*_S*_R*_001.fastq.gz; do
-  RD=$(echo "$f" | grep -o 'RD_[123]')
-  Read=$(echo "$f" | grep -o 'R[12]')
-  mv "$f" "${RD}.fastq.${Read}.gz"
-done
+for f in *_S*_R*_001.fastq.gz; do
+base=$(basename "$f")
 
-for f in *_RH30_*_S*_R*_001.fastq.gz; do
-  RH30=$(echo "$f" | grep -o 'RH30_[123]')
-  Read=$(echo "$f" | grep -o 'R[12]')
-  mv "$f" "${RH30}.fastq.${Read}.gz"
+Sample=$(echo "$base" | awk -F'_' '{print $2"_"$3}')
+Read=$(echo "$base" | awk -F'_' '{print $5}')
+
+mv "$f" "${Sample}.fastq.${Read}.gz"
 done
 ```
 
