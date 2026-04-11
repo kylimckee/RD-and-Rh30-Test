@@ -294,7 +294,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/
-sbatch --time=02:00:00 --wrap "snakemake -s trimmedQC_pipeline.smk"
+sbatch --time=04:00:00 --wrap "snakemake -s trimmedQC_pipeline.smk"
 ```
 
 
