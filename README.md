@@ -608,7 +608,7 @@ rule count_trimmed_reads:
     "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.count.txt"
   shell:
     """
-    cat {input} | wc -l | awk '{{print $1/4}}' > {output}
+    zcat {input} | awk 'END {{print NR/4}}' > {output}
     """
 
 rule count_kraken_reads:
@@ -618,7 +618,7 @@ rule count_kraken_reads:
     "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.count.txt"
   shell:
     """
-    cat {input} | wc -l | awk '{{print $1/4}}' > {output}
+    zcat {input} | awk 'END {{print NR/4}}' > {output}
     """
 
 rule count_bowtie_reads:
@@ -628,7 +628,7 @@ rule count_bowtie_reads:
     "run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.count.txt"
   shell:
     """
-    cat {input} | wc -l | awk '{{print $1/4}}' > {output}
+    zcat {input} | awk 'END {{print NR/4}}' > {output}
     """
 
 rule summarize_read_counts:
