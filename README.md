@@ -696,7 +696,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
-sbatch --cpus-per-task=4 --mem=16G --time=01:00:00 \--wrap "snakemake -s ReadCounts_pipeline.smk -j 4"
+sbatch --cpus-per-task=4 --mem=16G --time=03:00:00 \--wrap "snakemake -s ReadCounts_pipeline.smk -j 4"
 ```
 sjobs
 
