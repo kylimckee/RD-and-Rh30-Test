@@ -591,70 +591,103 @@ nano ReadCounts_pipeline.smk
 # Add the following code to the configuration file:
 
 SAMPLES = sorted(set(glob_wildcards(
-    "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.trimmed.gz"
+    "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R1.trimmed.gz"
 ).sample))
 
 rule all:
     input:
         "run_bulkRNA/clean_FASTQ/ReadCounts_output/read_summary.csv",
-        expand("run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.count.txt", sample=SAMPLES, read=[1,2]),
-        expand("run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.count.txt", sample=SAMPLES, read=[1,2]),
-        expand("run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.count.txt", sample=SAMPLES, read=[1,2])
+        expand("run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.count.txt",
+               sample=SAMPLES, read=[1, 2]),
+        expand("run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.count.txt",
+               sample=SAMPLES, read=[1, 2]),
+        expand("run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.count.txt",
+               sample=SAMPLES, read=[1, 2])
 
 rule count_trimmed_reads:
-  input:
-    "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.trimmed.gz"
-  output:
-    "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.count.txt"
-  shell:
-    """
-    zcat {input} | awk 'END {{print NR/4}}' > {output}
-    """
+    input:
+        "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.trimmed.gz"
+    output:
+        "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.count.txt"
+    shell:
+        """
+        mkdir -p $(dirname {output})
+        if gzip -t {input} 2>/dev/null; then
+            gzip -cd {input} | awk 'END {{print NR/4}}' > {output}
+        else
+            awk 'END {{print NR/4}}' {input} > {output}
+        fi
+        """
 
 rule count_kraken_reads:
-  input:
-    "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.gz"
-  output:
-    "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.count.txt"
-  shell:
-    """
-    zcat {input} | awk 'END {{print NR/4}}' > {output}
-    """
+    input:
+        "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.gz"
+    output:
+        "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.count.txt"
+    shell:
+        """
+        mkdir -p $(dirname {output})
+        if gzip -t {input} 2>/dev/null; then
+            gzip -cd {input} | awk 'END {{print NR/4}}' > {output}
+        else
+            awk 'END {{print NR/4}}' {input} > {output}
+        fi
+        """
 
 rule count_bowtie_reads:
-  input:
-    "run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.gz"
-  output:
-    "run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.count.txt"
-  shell:
-    """
-    zcat {input} | awk 'END {{print NR/4}}' > {output}
-    """
+    input:
+        "run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.gz"
+    output:
+        "run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.count.txt"
+    shell:
+        """
+        mkdir -p $(dirname {output})
+        if gzip -t {input} 2>/dev/null; then
+            gzip -cd {input} | awk 'END {{print NR/4}}' > {output}
+        else
+            awk 'END {{print NR/4}}' {input} > {output}
+        fi
+        """
 
 rule summarize_read_counts:
-  input:
-      TRIMMED = expand("run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.count.txt", sample=SAMPLES, read=[1,2]),
-      KRAKEN = expand("run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.count.txt", sample=SAMPLES, read=[1,2]),
-      BOWTIE = expand("run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.count.txt", sample=SAMPLES, read=[1,2])
-  output:
-      "run_bulkRNA/clean_FASTQ/ReadCounts_output/read_summary.csv"
-  run:
-      import pandas as pd
-      data = []
-      for sample in SAMPLES:
-        row = {"sample": sample}
-        for step, path_template in [
-            ("TRIMMED", "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.count.txt"),
-            ("KRAKEN", "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.count.txt"),
-            ("BOWTIE", "run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.count.txt")
-        ]:
-            for read in [1,2]:
-              file_path = path_template.format(sample=sample, read=read)
-              row[f"{step}_{read}"] = int(float(open(file_path).read().strip()))
-        data.append(row)
-      df = pd.DataFrame(data)
-      df.to_csv(output[0], index=False)
+    input:
+        TRIMMED = expand("run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.count.txt",
+                         sample=SAMPLES, read=[1, 2]),
+        KRAKEN = expand("run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.count.txt",
+                        sample=SAMPLES, read=[1, 2]),
+        BOWTIE = expand("run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.count.txt",
+                        sample=SAMPLES, read=[1, 2])
+    output:
+        "run_bulkRNA/clean_FASTQ/ReadCounts_output/read_summary.csv"
+    run:
+        import os
+        import pandas as pd
 
+        os.makedirs(os.path.dirname(output[0]), exist_ok=True)
+
+        data = []
+        for sample in SAMPLES:
+            row = {"sample": sample}
+
+            for step, path_template in [
+                ("TRIMMED", "run_bulkRNA/trimmed_FASTQ/{sample}.fastq.R{read}.count.txt"),
+                ("KRAKEN",  "run_bulkRNA/clean_FASTQ/kraken2_output/{sample}.fastq.R{read}.kraken.count.txt"),
+                ("BOWTIE",  "run_bulkRNA/clean_FASTQ/{sample}.fastq.R{read}.clean.count.txt")
+            ]:
+                counts = []
+                for read in [1, 2]:
+                    file_path = path_template.format(sample=sample, read=read)
+                    with open(file_path) as f:
+                        value = int(float(f.read().strip()))
+                    row[f"{step}_{read}"] = value
+                    counts.append(value)
+
+                row[f"{step}_TOTAL"] = sum(counts)
+
+            data.append(row)
+
+        df = pd.DataFrame(data)
+        df.to_csv(output[0], index=False)
 ```
 
 ### Run Read Counts Configuration File
@@ -665,7 +698,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 cd /data/mckeeka/bulkRNA_RMS
 sbatch --cpus-per-task=4 --mem=16G --time=01:00:00 \--wrap "snakemake -s ReadCounts_pipeline.smk -j 4"
 ```
-
+sjobs
 
 ## Create STAR Mapping Pipeline Working Directory
 
