@@ -2124,6 +2124,6 @@ message("Done. Wrote: ", paste0(out_prefix, ".smorf_classification.tsv"))
 
 ```bash
 
-sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=12:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; echo ENV_OK; Rscript Microproteins_Novel.r; echo DONE $(date)"
+sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=12:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; which Rscript; echo ENV_OK; Rscript Microproteins_Novel.r; echo DONE $(date)"
 
 ```
