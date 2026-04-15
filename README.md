@@ -1458,6 +1458,15 @@ cd /data/mckeeka/bulkRNA_RMS
 Rscript proteomics.r
 ```
 
+## Create Microproteins Pipeline Working Directory
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
+mkdir Microproteins
+```
+
+## Generate Microproteins Pipeline Configuration
+
 ### Install Microproteins Tools
 
 ```bash
@@ -1642,6 +1651,15 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins.smk --cores 8"
 ```
 
+## Create Novel Microproteins Pipeline Working Directory
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
+mkdir Novel_MicroProteins
+```
+
+## Generate Novel Microproteins Pipeline Configuration
+
 ### Install Novel Microproteins Tools
 
 ```bash
@@ -1681,7 +1699,8 @@ suppressPackageStartupMessages({
 pep_fasta    <- "run_bulkRNA/Microproteins/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
 gtf_file     <- "reference/Homo_sapiens.GRCh38.115.gtf"
 
-out_prefix   <- "smorf_results"
+out_dir <- "run_bulkRNA/Novel_Microproteins"
+out_prefix   <- file.path(out_dir, "smorf_results")
 max_aa_len   <- 100
 
 diamond_evalue    <- "1e-5"
