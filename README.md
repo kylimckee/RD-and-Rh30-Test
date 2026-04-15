@@ -1774,7 +1774,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_highconfidence.smk --cores 8"
 ```
 
-### Create High Confidence Microproteins Configuration File
+### Create Discovery Microproteins Configuration File
 
 ```bash
 nano Microproteins_discovery.smk
@@ -1852,7 +1852,7 @@ rule split_microproteins:
                     writer.writerow(row)
 ```
 
-### Run Microproteins Discovery Configuration File
+### Run Discovery Microproteins Configuration File
 
 The pipeline must be run using sbatch on the Biowulf cluster.
 
