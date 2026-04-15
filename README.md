@@ -2002,7 +2002,7 @@ meta <- rbindlist(lapply(hdrs, parse_transdecoder_header), fill = TRUE)
 meta[, aa_len := aa_len]
 
 # Keep only ORFs below the threshold
-keep_idx <- aa_len < max_aa_len
+keep_idx <- aa_len <= max_aa_len
 pep_smorf <- pep[keep_idx]
 meta_smorf <- meta[keep_idx]
 
