@@ -1697,7 +1697,7 @@ rule build_orf_metadata:
 
                 m = re.search(r"len=(\d+)", header)
                 length_aa = int(m.group(1)) if m else len(seq)
-                category = "microprotein" if length_aa < MIN_MICROPROTEIN_AA else "protein"
+                category = "microprotein" if length_aa <= MIN_MICROPROTEIN_AA else "protein"
 
                 out.write(f"{orf_id}\t{transcript_id}\t{length_aa}\t{seq}\t{category}\n")
 
