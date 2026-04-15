@@ -1083,6 +1083,7 @@ from glob import glob
 GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
 BAM_DIR = "run_bulkRNA/STAR_new"
 COUNT_DIR = "run_bulkRNA/FeatureCounts"
+TPM_DIR = "run_bulkRNA/TPM"
 
 SAMPLES = sorted(
     Path(b).name.replace(".Aligned.sortedByCoord.out.bam", "")
@@ -1091,8 +1092,9 @@ SAMPLES = sorted(
 
 rule all:
     input:
-        f"{COUNT_DIR}/gene_counts.txt"
-        
+        f"{COUNT_DIR}/gene_counts_unfiltered.txt",
+        f"{TPM_DIR}/gene_tpm_unfiltered.tsv"
+
 rule featurecounts:
     input:
         bams=lambda wildcards: expand(
@@ -1101,10 +1103,11 @@ rule featurecounts:
         ),
         gtf=GTF
     output:
-        counts=f"{COUNT_DIR}/gene_counts.txt"
+        counts=f"{COUNT_DIR}/gene_counts_unfiltered.txt"
     threads: 6
     shell:
         """
+        mkdir -p {COUNT_DIR}
         featureCounts \
             -T {threads} \
             -a {input.gtf} \
@@ -1114,6 +1117,38 @@ rule featurecounts:
             -C \
             {input.bams}
         """
+
+rule tpm:
+    input:
+        counts=f"{COUNT_DIR}/gene_counts_unfiltered.txt"
+    output:
+        tpm=f"{TPM_DIR}/gene_tpm_unfiltered.tsv"
+    run:
+        import pandas as pd
+        import numpy as np
+        import os
+
+        os.makedirs(TPM_DIR, exist_ok=True)
+
+        df = pd.read_csv(
+            input.counts,
+            sep="\t",
+            comment="#"
+        )
+
+        annotation_cols = ["Geneid", "Chr", "Start", "End", "Strand", "Length"]
+        sample_cols = [c for c in df.columns if c not in annotation_cols]
+
+        lengths_kb = df["Length"] / 1000.0
+        counts = df[sample_cols].apply(pd.to_numeric, errors="coerce").fillna(0)
+
+        rpk = counts.div(lengths_kb, axis=0)
+        scaling_factors = rpk.sum(axis=0)
+        tpm = rpk.div(scaling_factors, axis=1) * 1e6
+
+        tpm.insert(0, "Geneid", df["Geneid"])
+        tpm.to_csv(output.tpm, sep="\t", index=False)
+
 ```
 
 ### Run Feature Counts Configuration File
