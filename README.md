@@ -1908,7 +1908,7 @@ suppressPackageStartupMessages({
 # User inputs
 # =========================
 
-pep_fasta    <- "run_bulkRNA/Microproteins/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
+pep_fasta    <- "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
 gtf_file     <- "reference/Homo_sapiens.GRCh38.115.gtf"
 
 out_dir <- "run_bulkRNA/Novel_Microproteins/high_confidence"
@@ -2361,7 +2361,7 @@ suppressPackageStartupMessages({
 # User inputs
 # =========================
 
-pep_fasta    <- "run_bulkRNA/Microproteins/orf/transcripts.fa.transdecoder.pep"
+pep_fasta    <- "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder.pep"
 gtf_file     <- "reference/Homo_sapiens.GRCh38.115.gtf"
 
 out_dir <- "run_bulkRNA/Novel_Microproteins/discovery"
