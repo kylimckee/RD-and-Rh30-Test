@@ -1620,9 +1620,7 @@ rule all:
         f"{OUT_DIR}/orf/transcripts.fa.transdecoder.gff3",
         f"{OUT_DIR}/orf/transcripts.fa.transdecoder.cds",
         f"{OUT_DIR}/orf/orf_metadata.tsv",
-        f"{OUT_DIR}/orf/microproteins.tsv",
-        f"{OUT_DIR}/qc/library_sizes.pdf",
-        f"{OUT_DIR}/qc/count_distribution.pdf"
+        f"{OUT_DIR}/orf/microproteins.tsv"
 
 rule extract_transcripts:
     input:
