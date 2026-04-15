@@ -1908,7 +1908,7 @@ suppressPackageStartupMessages({
 # User inputs
 # =========================
 
-pep_fasta    <- "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
+pep_fasta    <- "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder.pep"
 gtf_file     <- "reference/Homo_sapiens.GRCh38.115.gtf"
 
 out_dir <- "run_bulkRNA/Novel_Microproteins/high_confidence"
@@ -2361,7 +2361,7 @@ suppressPackageStartupMessages({
 # User inputs
 # =========================
 
-pep_fasta    <- "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder.pep"
+pep_fasta    <- "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
 gtf_file     <- "reference/Homo_sapiens.GRCh38.115.gtf"
 
 out_dir <- "run_bulkRNA/Novel_Microproteins/discovery"
@@ -2790,7 +2790,7 @@ message("Done. Wrote: ", paste0(out_prefix, ".smorf_classification.tsv"))
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/
 
-sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=1:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; which Rscript; echo ENV_OK; Rscript Microproteins_Novel_Discovery.r; echo DONE $(date)"
+sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=5:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; which Rscript; echo ENV_OK; Rscript Microproteins_Novel_Discovery.r; echo DONE $(date)"
 
 ```
 
