@@ -1655,7 +1655,7 @@ sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Micr
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
-mkdir Novel_MicroProteins
+mkdir Novel_Microproteins
 ```
 
 ## Generate Novel Microproteins Pipeline Configuration
