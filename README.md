@@ -1094,6 +1094,7 @@ SAMPLES = sorted(
 rule all:
     input:
         f"{COUNT_DIR}/gene_counts_unfiltered.txt",
+        f"{COUNT_DIR}/gene_counts_clean_unfiltered.txt",
         f"{TPM_DIR}/gene_tpm_unfiltered.tsv"
 
 rule featurecounts:
@@ -1119,14 +1120,39 @@ rule featurecounts:
             {input.bams}
         """
 
-rule tpm:
+rule clean_featurecounts:
     input:
         counts=f"{COUNT_DIR}/gene_counts_unfiltered.txt"
+    output:
+        clean=f"{COUNT_DIR}/gene_counts_clean_unfiltered.txt"
+    run:
+        import pandas as pd
+        import re
+
+        df = pd.read_csv(
+            input.counts,
+            sep="\t",
+            comment="#"
+        )
+
+        annotation_cols = ["Geneid", "Chr", "Start", "End", "Strand", "Length"]
+        sample_cols = [c for c in df.columns if c not in annotation_cols]
+
+        clean_names = [re.sub(r".*/", "", c) for c in sample_cols]
+        clean_names = [re.sub(r"\.Aligned\.sortedByCoord\.out\.bam$", "", c) for c in clean_names]
+
+        rename_map = dict(zip(sample_cols, clean_names))
+        df = df.rename(columns=rename_map)
+
+        df.to_csv(output.clean, sep="\t", index=False)
+
+rule tpm:
+    input:
+        counts=f"{COUNT_DIR}/gene_counts_clean_unfiltered.txt"
     output:
         tpm=f"{TPM_DIR}/gene_tpm_unfiltered.tsv"
     run:
         import pandas as pd
-        import numpy as np
         import os
 
         os.makedirs(TPM_DIR, exist_ok=True)
@@ -1149,7 +1175,6 @@ rule tpm:
 
         tpm.insert(0, "Geneid", df["Geneid"])
         tpm.to_csv(output.tpm, sep="\t", index=False)
-
 ```
 
 ### Run Feature Counts Configuration File
@@ -1180,6 +1205,7 @@ from glob import glob
 GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
 BAM_DIR = "run_bulkRNA/STAR_filtered"
 COUNT_DIR = "run_bulkRNA/FeatureCounts"
+TPM_DIR = "run_bulkRNA/TPM"
 
 SAMPLES = sorted(
     Path(b).name.replace(".Aligned.sortedByCoord.out.bam", "")
@@ -1188,8 +1214,10 @@ SAMPLES = sorted(
 
 rule all:
     input:
-        f"{COUNT_DIR}/gene_counts_filtered.txt"
-        
+        f"{COUNT_DIR}/gene_counts_filtered.txt",
+        f"{COUNT_DIR}/gene_counts_clean_filtered.txt",
+        f"{TPM_DIR}/gene_tpm_filtered.tsv"
+
 rule featurecounts:
     input:
         bams=lambda wildcards: expand(
@@ -1202,6 +1230,7 @@ rule featurecounts:
     threads: 6
     shell:
         """
+        mkdir -p {COUNT_DIR}
         featureCounts \
             -T {threads} \
             -a {input.gtf} \
@@ -1211,14 +1240,40 @@ rule featurecounts:
             -C \
             {input.bams}
         """
-rule tpm:
+
+rule clean_featurecounts:
     input:
         counts=f"{COUNT_DIR}/gene_counts_filtered.txt"
+    output:
+        clean=f"{COUNT_DIR}/gene_counts_clean_filtered.txt"
+    run:
+        import pandas as pd
+        import re
+
+        df = pd.read_csv(
+            input.counts,
+            sep="\t",
+            comment="#"
+        )
+
+        annotation_cols = ["Geneid", "Chr", "Start", "End", "Strand", "Length"]
+        sample_cols = [c for c in df.columns if c not in annotation_cols]
+
+        clean_names = [re.sub(r".*/", "", c) for c in sample_cols]
+        clean_names = [re.sub(r"\.Aligned\.sortedByCoord\.out\.bam$", "", c) for c in clean_names]
+
+        rename_map = dict(zip(sample_cols, clean_names))
+        df = df.rename(columns=rename_map)
+
+        df.to_csv(output.clean, sep="\t", index=False)
+
+rule tpm:
+    input:
+        counts=f"{COUNT_DIR}/gene_counts_clean_filtered.txt"
     output:
         tpm=f"{TPM_DIR}/gene_tpm_filtered.tsv"
     run:
         import pandas as pd
-        import numpy as np
         import os
 
         os.makedirs(TPM_DIR, exist_ok=True)
