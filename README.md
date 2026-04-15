@@ -1766,7 +1766,7 @@ rule count_qc_plots:
         """
 ```
 
-### Run Microproteins Configuration File
+### Run Microproteins High Confidence Configuration File
 
 The pipeline must be run using sbatch on the Biowulf cluster.
 
@@ -1852,7 +1852,7 @@ rule split_microproteins:
                     writer.writerow(row)
 ```
 
-### Run Microproteins Configuration File
+### Run Microproteins Discovery Configuration File
 
 The pipeline must be run using sbatch on the Biowulf cluster.
 
