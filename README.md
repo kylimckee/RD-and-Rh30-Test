@@ -1585,6 +1585,9 @@ Rscript proteomics.r
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
 mkdir Microproteins
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Microproteins
+mkdir high_confidence
+mkdir discovery
 ```
 
 ## Generate Microproteins Pipeline Configuration
@@ -1597,10 +1600,10 @@ conda create -n Microproteins -c conda-forge -c bioconda snakemake gffread trans
 conda activate Microproteins
 ```
 
-### Create Microproteins Configuration File
+### Create High Confidence Microproteins Configuration File
 
 ```bash
-nano Microproteins.smk
+nano Microproteins_highconfidence.smk
 
 # Add the following code to the configuration file:
 
@@ -1608,7 +1611,7 @@ MIN_MICROPROTEIN_AA = 100
 GENOME_FASTA = "reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
 GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
 COUNTS = "run_bulkRNA/FeatureCounts/gene_counts_filtered.txt"
-OUT_DIR = "run_bulkRNA/Microproteins"
+OUT_DIR = "run_bulkRNA/Microproteins/high_confidence"
 
 rule all:
     input:
@@ -1770,7 +1773,93 @@ rule count_qc_plots:
 The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
-sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins.smk --cores 8"
+sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_highconfidence.smk --cores 8"
+```
+
+### Create High Confidence Microproteins Configuration File
+
+```bash
+nano Microproteins_discovery.smk
+
+# Add the following code to the configuration file:
+
+from pathlib import Path
+
+MIN_MICROPROTEIN_AA = 100
+pep_fasta = "run_bulkRNA/Microproteins/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
+OUT_DIR = "run_bulkRNA/Microproteins/discovery"
+
+rule all:
+    input:
+        f"{OUT_DIR}/orf/orf_metadata.tsv",
+        f"{OUT_DIR}/orf/microproteins.tsv"
+
+rule build_orf_metadata:
+    input:
+        pep=pep_fasta
+    output:
+        tsv=f"{OUT_DIR}/orf/orf_metadata.tsv"
+    run:
+        import re
+
+        Path(f"{OUT_DIR}/orf").mkdir(parents=True, exist_ok=True)
+
+        def parse_fasta(path):
+            header = None
+            seq_parts = []
+            with open(path) as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith(">"):
+                        if header is not None:
+                            yield header, "".join(seq_parts)
+                        header = line[1:]
+                        seq_parts = []
+                    else:
+                        seq_parts.append(line)
+                if header is not None:
+                    yield header, "".join(seq_parts)
+
+        with open(output.tsv, "w") as out:
+            out.write("orf_id\ttranscript_id\tlength_aa\tsequence\tcategory\n")
+            for header, seq in parse_fasta(input.pep):
+                orf_id = header.split()[0]
+
+                transcript_id = orf_id
+                if ".p" in orf_id:
+                    transcript_id = orf_id.rsplit(".p", 1)[0]
+
+                m = re.search(r"len=(\d+)", header)
+                length_aa = int(m.group(1)) if m else len(seq)
+                category = "microprotein" if length_aa <= MIN_MICROPROTEIN_AA else "protein"
+
+                out.write(f"{orf_id}\t{transcript_id}\t{length_aa}\t{seq}\t{category}\n")
+
+rule split_microproteins:
+    input:
+        tsv=f"{OUT_DIR}/orf/orf_metadata.tsv"
+    output:
+        tsv=f"{OUT_DIR}/orf/microproteins.tsv"
+    run:
+        import csv
+
+        with open(input.tsv) as inf, open(output.tsv, "w", newline="") as outf:
+            reader = csv.DictReader(inf, delimiter="\t")
+            writer = csv.DictWriter(outf, fieldnames=reader.fieldnames, delimiter="\t")
+            writer.writeheader()
+            for row in reader:
+                if row["category"] == "microprotein":
+                    writer.writerow(row)
+```
+
+### Run Microproteins Configuration File
+
+The pipeline must be run using sbatch on the Biowulf cluster.
+
+```bash
+sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_discovery.smk --cores 8"
 ```
 
 ## Create Novel Microproteins Pipeline Working Directory
