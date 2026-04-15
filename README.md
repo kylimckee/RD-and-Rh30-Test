@@ -1784,7 +1784,7 @@ nano Microproteins_discovery.smk
 from pathlib import Path
 
 MIN_MICROPROTEIN_AA = 100
-pep_fasta = "run_bulkRNA/Microproteins/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
+pep_fasta = "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
 OUT_DIR = "run_bulkRNA/Microproteins/discovery"
 
 rule all:
