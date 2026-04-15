@@ -1056,6 +1056,7 @@ python STAR_QC_filtered.py
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
 mkdir FeatureCounts
+mkdir TPM
 ```
 
 ## Generate Feature Counts Pipeline Configuration
@@ -1187,7 +1188,7 @@ SAMPLES = sorted(
 
 rule all:
     input:
-        f"{COUNT_DIR}/gene_counts.txt"
+        f"{COUNT_DIR}/gene_counts_filtered.txt"
         
 rule featurecounts:
     input:
@@ -1197,7 +1198,7 @@ rule featurecounts:
         ),
         gtf=GTF
     output:
-        counts=f"{COUNT_DIR}/gene_counts.txt"
+        counts=f"{COUNT_DIR}/gene_counts_filtered.txt"
     threads: 6
     shell:
         """
@@ -1210,6 +1211,37 @@ rule featurecounts:
             -C \
             {input.bams}
         """
+rule tpm:
+    input:
+        counts=f"{COUNT_DIR}/gene_counts_filtered.txt"
+    output:
+        tpm=f"{TPM_DIR}/gene_tpm_filtered.tsv"
+    run:
+        import pandas as pd
+        import numpy as np
+        import os
+
+        os.makedirs(TPM_DIR, exist_ok=True)
+
+        df = pd.read_csv(
+            input.counts,
+            sep="\t",
+            comment="#"
+        )
+
+        annotation_cols = ["Geneid", "Chr", "Start", "End", "Strand", "Length"]
+        sample_cols = [c for c in df.columns if c not in annotation_cols]
+
+        lengths_kb = df["Length"] / 1000.0
+        counts = df[sample_cols].apply(pd.to_numeric, errors="coerce").fillna(0)
+
+        rpk = counts.div(lengths_kb, axis=0)
+        scaling_factors = rpk.sum(axis=0)
+        tpm = rpk.div(scaling_factors, axis=1) * 1e6
+
+        tpm.insert(0, "Geneid", df["Geneid"])
+        tpm.to_csv(output.tpm, sep="\t", index=False)
+
 ```
 
 ### Run Feature Counts Filtered Configuration File
