@@ -1857,7 +1857,7 @@ rule split_microproteins:
 The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
-sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_discovery.smk --cores 8"
+sbatch --time=00-00:20:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_discovery.smk --cores 8"
 ```
 
 ## Create Novel Microproteins Pipeline Working Directory
