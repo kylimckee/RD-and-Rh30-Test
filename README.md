@@ -1,4 +1,4 @@
-# RD-and-Rh30-Test
+# RMS Bulk RNA Analysis
 
 Pipeline used to analyze RD and Rh30 bulk RNA-sequencing data to validate the pipeline outputs coorelate with what is seen in corresponding mass spectrometry data.
 
