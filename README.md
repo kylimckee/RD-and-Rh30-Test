@@ -991,7 +991,7 @@ python STAR_QC.py
 
 This pipeline was generated to analyze the quality of STAR mapping on our filtered samples.
 
-### Create Snakemake STAR QC Configuration File
+### CreatecSnakemake Filtered STAR QC Configuration File
 
 ```bash
 conda activate STAR_QC
@@ -1043,7 +1043,7 @@ print(f"Wrote {OUT_CSV}")
 
 ```
 
-### Run STAR QC Configuration File
+### Run Filtered STAR QC Configuration File
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
