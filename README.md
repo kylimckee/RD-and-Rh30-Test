@@ -1613,8 +1613,15 @@ GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
 COUNTS = "run_bulkRNA/FeatureCounts/gene_counts_filtered.txt"
 OUT_DIR = "run_bulkRNA/Microproteins/high_confidence"
 
+SAMPLES = sorted(
+    Path(b).name.replace(".Aligned.sortedByCoord.out.bam", "")
+    for b in glob(f"{BAM_DIR}/*.Aligned.sortedByCoord.out.bam")
+)
+
 rule all:
     input:
+        expand("run_bulkRNA/Microproteins/stringtie/{sample}.gtf", sample=SAMPLES),
+        "run_bulkRNA/Microproteins/high_confidence/orf/merged.gtf",
         f"{OUT_DIR}/orf/transcripts.fa",
         f"{OUT_DIR}/orf/transcripts.fa.transdecoder.pep",
         f"{OUT_DIR}/orf/transcripts.fa.transdecoder.gff3",
@@ -1622,10 +1629,32 @@ rule all:
         f"{OUT_DIR}/orf/orf_metadata.tsv",
         f"{OUT_DIR}/orf/microproteins.tsv"
 
+rule stringtie_assemble:
+    input:
+        bam="run_bulkRNA/aligned/{sample}.bam"
+    output:
+        gtf="run_bulkRNA/Microproteins/stringtie/{sample}.gtf"
+    shell:
+        """
+        mkdir -p run_bulkRNA/Microproteins/stringtie
+        stringtie {input.bam} -G {GTF} -o {output.gtf}
+        """
+
+rule merge_transcripts:
+    input:
+        gtfs=expand("run_bulkRNA/Microproteins/stringtie/{sample}.gtf", sample=SAMPLES)
+    output:
+        merged="run_bulkRNA/Microproteins/high_confidence/orf/merged.gtf"
+    shell:
+        """
+        mkdir -p run_bulkRNA/Microproteins/high_confidence/orf
+        stringtie --merge -G {GTF} -o {output.merged} {input.gtfs}
+        """
+
 rule extract_transcripts:
     input:
         genome=GENOME_FASTA,
-        gtf=GTF
+        gtf="run_bulkRNA/Microproteins/high_confidence/orf/merged.gtf"
     output:
         fa=f"{OUT_DIR}/orf/transcripts.fa"
     shell:
@@ -1691,16 +1720,17 @@ rule build_orf_metadata:
             for header, seq in parse_fasta(input.pep):
                 orf_id = header.split()[0]
 
-                # Try to recover transcript ID from TransDecoder-style headers
                 transcript_id = orf_id
                 if ".p" in orf_id:
                     transcript_id = orf_id.rsplit(".p", 1)[0]
 
                 m = re.search(r"len=(\d+)", header)
                 length_aa = int(m.group(1)) if m else len(seq)
+
                 category = "microprotein" if length_aa <= MIN_MICROPROTEIN_AA else "protein"
 
                 out.write(f"{orf_id}\t{transcript_id}\t{length_aa}\t{seq}\t{category}\n")
+
 
 rule split_microproteins:
     input:
@@ -1718,9 +1748,10 @@ rule split_microproteins:
                 if row["category"] == "microprotein":
                     writer.writerow(row)
 
+
 rule count_qc_plots:
     input:
-        counts="run_bulkRNA/FeatureCounts/gene_counts_filtered.txt"
+        counts=COUNTS
     output:
         lib="run_bulkRNA/Microproteins/qc/library_sizes.pdf",
         dist="run_bulkRNA/Microproteins/qc/count_distribution.pdf"
@@ -1747,7 +1778,6 @@ rule count_qc_plots:
           }}
 
           sample_counts <- as.data.frame(lapply(sample_counts, as.numeric))
-          rownames(sample_counts) <- if ("Geneid" %in% names(counts)) counts$Geneid else rownames(counts)
 
           pdf("{output.lib}")
           barplot(colSums(sample_counts, na.rm = TRUE),
