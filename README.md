@@ -1615,6 +1615,7 @@ GENOME_FASTA = "reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
 GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
 COUNTS = "run_bulkRNA/FeatureCounts/gene_counts_filtered.txt"
 OUT_DIR = "run_bulkRNA/Microproteins/high_confidence"
+BAM_DIR = "run_bulkRNA/STAR_new"
 
 SAMPLES = sorted(
     Path(b).name.replace(".Aligned.sortedByCoord.out.bam", "")
