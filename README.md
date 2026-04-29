@@ -1607,6 +1607,9 @@ nano Microproteins_highconfidence.smk
 
 # Add the following code to the configuration file:
 
+from pathlib import Path
+from glob import glob
+
 MIN_MICROPROTEIN_AA = 100
 GENOME_FASTA = "reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
 GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
