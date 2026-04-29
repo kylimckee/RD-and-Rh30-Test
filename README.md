@@ -1596,7 +1596,7 @@ mkdir discovery
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
-conda create -n Microproteins -c conda-forge -c bioconda snakemake gffread transdecoder r-base python=3.10 -y
+conda create -n Microproteins -c conda-forge -c bioconda snakemake gffread transdecoder stringtie r-base python=3.10 -y
 conda activate Microproteins
 ```
 
