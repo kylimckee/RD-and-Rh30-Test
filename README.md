@@ -1635,7 +1635,7 @@ rule all:
 
 rule stringtie_assemble:
     input:
-        bam="run_bulkRNA/aligned/{sample}.bam"
+        bam=f"{BAM_DIR}/{{sample}}.Aligned.sortedByCoord.out.bam"
     output:
         gtf="run_bulkRNA/Microproteins/stringtie/{sample}.gtf"
     shell:
