@@ -991,7 +991,7 @@ python STAR_QC.py
 
 This pipeline was generated to analyze the quality of STAR mapping on our filtered samples.
 
-### CreatecSnakemake Filtered STAR QC Configuration File
+### Create Snakemake Filtered STAR QC Configuration File
 
 ```bash
 conda activate STAR_QC
@@ -1580,17 +1580,19 @@ cd /data/mckeeka/bulkRNA_RMS
 Rscript proteomics.r
 ```
 
-## Create Microproteins Pipeline Working Directory
+## Create Filtered Microproteins Pipeline Working Directory
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
 mkdir Microproteins
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Microproteins
+mkdir filtered
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Microproteins/filtered/
 mkdir high_confidence
 mkdir discovery
 ```
 
-## Generate Microproteins Pipeline Configuration
+## Generate Filtered Microproteins Pipeline Configuration
 
 ### Install Microproteins Tools
 
@@ -1600,7 +1602,7 @@ conda create -n Microproteins -c conda-forge -c bioconda snakemake gffread trans
 conda activate Microproteins
 ```
 
-### Create High Confidence Microproteins Configuration File
+### Create High Confidence Filtered Microproteins Configuration File
 
 ```bash
 nano Microproteins_highconfidence.smk
@@ -1808,7 +1810,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_highconfidence.smk --cores 8"
 ```
 
-### Create Discovery Microproteins Configuration File
+### Create Discovery Filtered Microproteins Configuration File
 
 ```bash
 nano Microproteins_discovery.smk
@@ -1886,7 +1888,7 @@ rule split_microproteins:
                     writer.writerow(row)
 ```
 
-### Run Discovery Microproteins Configuration File
+### Run Discovery Filtered Microproteins Configuration File
 
 The pipeline must be run using sbatch on the Biowulf cluster.
 
@@ -1894,7 +1896,7 @@ The pipeline must be run using sbatch on the Biowulf cluster.
 sbatch --time=00-00:20:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_discovery.smk --cores 8"
 ```
 
-## Create Novel Microproteins Pipeline Working Directory
+## Create Filtered Novel Microproteins Pipeline Working Directory
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
@@ -1904,7 +1906,7 @@ mkdir high_confidence
 mkdir discovery
 ```
 
-## Generate Novel Microproteins Pipeline Configuration
+## Generate Filtered Novel Microproteins Pipeline Configuration
 
 ### Install Novel Microproteins Tools
 
@@ -1922,7 +1924,7 @@ conda create -n smorf \
 conda activate smorf
 ```
 
-### Create Novel Microproteins High Confidence Configuration File
+### Create Filtered Novel Microproteins High Confidence Configuration File
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
@@ -2366,7 +2368,7 @@ fwrite(
 message("Done. Wrote: ", paste0(out_prefix, ".smorf_classification.tsv"))
 ```
 
-### Run Novel Microproteins High Confidence Configuration File
+### Run Filtered Novel Microproteins High Confidence Configuration File
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/
@@ -2375,7 +2377,7 @@ sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=1:00:00 --output=smor
 
 ```
 
-### Create Novel Microproteins Discovery Configuration File
+### Create Filtered Novel Microproteins Discovery Configuration File
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
@@ -2819,7 +2821,7 @@ fwrite(
 message("Done. Wrote: ", paste0(out_prefix, ".smorf_classification.tsv"))
 ```
 
-### Run Novel Microproteins Discovery Configuration File
+### Run Filtered Novel Microproteins Discovery Configuration File
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/
@@ -2827,3 +2829,1254 @@ cd /data/mckeeka/bulkRNA_RMS/
 sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=5:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; which Rscript; echo ENV_OK; Rscript Microproteins_Novel_Discovery.r; echo DONE $(date)"
 
 ```
+
+## Create Filtered Microproteins Pipeline Working Directory
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
+mkdir Microproteins
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Microproteins
+mkdir filtered
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Microproteins/filtered/
+mkdir high_confidence
+mkdir discovery
+```
+
+## Generate Filtered Microproteins Pipeline Configuration
+
+### Install Microproteins Tools
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+conda create -n Microproteins -c conda-forge -c bioconda snakemake gffread transdecoder stringtie r-base python=3.10 -y
+conda activate Microproteins
+```
+
+### Create High Confidence Filtered Microproteins Configuration File
+
+```bash
+nano Microproteins_highconfidence.smk
+
+# Add the following code to the configuration file:
+
+from pathlib import Path
+from glob import glob
+
+MIN_MICROPROTEIN_AA = 100
+GENOME_FASTA = "reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
+GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
+COUNTS = "run_bulkRNA/FeatureCounts/gene_counts_filtered.txt"
+OUT_DIR = "run_bulkRNA/Microproteins/high_confidence"
+BAM_DIR = "run_bulkRNA/STAR_new"
+
+SAMPLES = sorted(
+    Path(b).name.replace(".Aligned.sortedByCoord.out.bam", "")
+    for b in glob(f"{BAM_DIR}/*.Aligned.sortedByCoord.out.bam")
+)
+
+rule all:
+    input:
+        expand("run_bulkRNA/Microproteins/stringtie/{sample}.gtf", sample=SAMPLES),
+        "run_bulkRNA/Microproteins/high_confidence/orf/merged.gtf",
+        f"{OUT_DIR}/orf/transcripts.fa",
+        f"{OUT_DIR}/orf/transcripts.fa.transdecoder.pep",
+        f"{OUT_DIR}/orf/transcripts.fa.transdecoder.gff3",
+        f"{OUT_DIR}/orf/transcripts.fa.transdecoder.cds",
+        f"{OUT_DIR}/orf/orf_metadata.tsv",
+        f"{OUT_DIR}/orf/microproteins.tsv"
+
+rule stringtie_assemble:
+    input:
+        bam=f"{BAM_DIR}/{{sample}}.Aligned.sortedByCoord.out.bam"
+    output:
+        gtf="run_bulkRNA/Microproteins/stringtie/{sample}.gtf"
+    shell:
+        """
+        mkdir -p run_bulkRNA/Microproteins/stringtie
+        stringtie {input.bam} -G {GTF} -o {output.gtf}
+        """
+
+rule merge_transcripts:
+    input:
+        gtfs=expand("run_bulkRNA/Microproteins/stringtie/{sample}.gtf", sample=SAMPLES)
+    output:
+        merged="run_bulkRNA/Microproteins/high_confidence/orf/merged.gtf"
+    shell:
+        """
+        mkdir -p run_bulkRNA/Microproteins/high_confidence/orf
+        stringtie --merge -G {GTF} -o {output.merged} {input.gtfs}
+        """
+
+rule extract_transcripts:
+    input:
+        genome=GENOME_FASTA,
+        gtf="run_bulkRNA/Microproteins/high_confidence/orf/merged.gtf"
+    output:
+        fa=f"{OUT_DIR}/orf/transcripts.fa"
+    shell:
+        """
+        mkdir -p {OUT_DIR}/orf
+        gffread {input.gtf} -g {input.genome} -w {output.fa}
+        """
+
+rule transdecoder_longorfs:
+    input:
+        fa=f"{OUT_DIR}/orf/transcripts.fa"
+    output:
+        flag=f"{OUT_DIR}/orf/.longorfs.done"
+    shell:
+        """
+        cd {OUT_DIR}/orf
+        TransDecoder.LongOrfs -t transcripts.fa
+        touch .longorfs.done
+        """
+
+rule transdecoder_predict:
+    input:
+        fa=f"{OUT_DIR}/orf/transcripts.fa",
+        flag=f"{OUT_DIR}/orf/.longorfs.done"
+    output:
+        pep=f"{OUT_DIR}/orf/transcripts.fa.transdecoder.pep",
+        gff3=f"{OUT_DIR}/orf/transcripts.fa.transdecoder.gff3",
+        cds=f"{OUT_DIR}/orf/transcripts.fa.transdecoder.cds"
+    shell:
+        """
+        cd {OUT_DIR}/orf
+        TransDecoder.Predict -t transcripts.fa
+        """
+
+rule build_orf_metadata:
+    input:
+        pep=f"{OUT_DIR}/orf/transcripts.fa.transdecoder.pep"
+    output:
+        tsv=f"{OUT_DIR}/orf/orf_metadata.tsv"
+    run:
+        import re
+
+        def parse_fasta(path):
+            header = None
+            seq_parts = []
+            with open(path) as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith(">"):
+                        if header is not None:
+                            yield header, "".join(seq_parts)
+                        header = line[1:]
+                        seq_parts = []
+                    else:
+                        seq_parts.append(line)
+                if header is not None:
+                    yield header, "".join(seq_parts)
+
+        with open(output.tsv, "w") as out:
+            out.write("orf_id\ttranscript_id\tlength_aa\tsequence\tcategory\n")
+            for header, seq in parse_fasta(input.pep):
+                orf_id = header.split()[0]
+
+                transcript_id = orf_id
+                if ".p" in orf_id:
+                    transcript_id = orf_id.rsplit(".p", 1)[0]
+
+                m = re.search(r"len=(\d+)", header)
+                length_aa = int(m.group(1)) if m else len(seq)
+
+                category = "microprotein" if length_aa <= MIN_MICROPROTEIN_AA else "protein"
+
+                out.write(f"{orf_id}\t{transcript_id}\t{length_aa}\t{seq}\t{category}\n")
+
+
+rule split_microproteins:
+    input:
+        tsv=f"{OUT_DIR}/orf/orf_metadata.tsv"
+    output:
+        tsv=f"{OUT_DIR}/orf/microproteins.tsv"
+    run:
+        import csv
+
+        with open(input.tsv) as inf, open(output.tsv, "w", newline="") as outf:
+            reader = csv.DictReader(inf, delimiter="\t")
+            writer = csv.DictWriter(outf, fieldnames=reader.fieldnames, delimiter="\t")
+            writer.writeheader()
+            for row in reader:
+                if row["category"] == "microprotein":
+                    writer.writerow(row)
+
+
+rule count_qc_plots:
+    input:
+        counts=COUNTS
+    output:
+        lib="run_bulkRNA/Microproteins/qc/library_sizes.pdf",
+        dist="run_bulkRNA/Microproteins/qc/count_distribution.pdf"
+    shell:
+        r"""
+        mkdir -p run_bulkRNA/Microproteins/qc
+        Rscript -e '
+          counts <- read.delim(
+            "{input.counts}",
+            header = TRUE,
+            sep = "\t",
+            comment.char = "#",
+            check.names = FALSE,
+            fill = TRUE,
+            quote = "",
+            stringsAsFactors = FALSE
+          )
+
+          annotation_cols <- c("Geneid", "Chr", "Start", "End", "Strand", "Length")
+          sample_counts <- counts[, !(names(counts) %in% annotation_cols), drop = FALSE]
+
+          if ("Geneid" %in% names(counts)) {{
+            rownames(sample_counts) <- counts$Geneid
+          }}
+
+          sample_counts <- as.data.frame(lapply(sample_counts, as.numeric))
+
+          pdf("{output.lib}")
+          barplot(colSums(sample_counts, na.rm = TRUE),
+                  las = 2,
+                  main = "Library sizes",
+                  ylab = "Total counts")
+          dev.off()
+
+          pdf("{output.dist}")
+          boxplot(log2(sample_counts + 1),
+                  las = 2,
+                  main = "Log2 count distribution",
+                  ylab = "log2(counts + 1)")
+          dev.off()
+        '
+        """
+```
+
+### Run Microproteins High Confidence Configuration File
+
+The pipeline must be run using sbatch on the Biowulf cluster.
+
+```bash
+sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_highconfidence.smk --cores 8"
+```
+
+### Create Discovery Filtered Microproteins Configuration File
+
+```bash
+nano Microproteins_discovery.smk
+
+# Add the following code to the configuration file:
+
+from pathlib import Path
+
+MIN_MICROPROTEIN_AA = 100
+pep_fasta = "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
+OUT_DIR = "run_bulkRNA/Microproteins/discovery"
+
+rule all:
+    input:
+        f"{OUT_DIR}/orf/orf_metadata.tsv",
+        f"{OUT_DIR}/orf/microproteins.tsv"
+
+rule build_orf_metadata:
+    input:
+        pep=pep_fasta
+    output:
+        tsv=f"{OUT_DIR}/orf/orf_metadata.tsv"
+    run:
+        import re
+
+        Path(f"{OUT_DIR}/orf").mkdir(parents=True, exist_ok=True)
+
+        def parse_fasta(path):
+            header = None
+            seq_parts = []
+            with open(path) as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith(">"):
+                        if header is not None:
+                            yield header, "".join(seq_parts)
+                        header = line[1:]
+                        seq_parts = []
+                    else:
+                        seq_parts.append(line)
+                if header is not None:
+                    yield header, "".join(seq_parts)
+
+        with open(output.tsv, "w") as out:
+            out.write("orf_id\ttranscript_id\tlength_aa\tsequence\tcategory\n")
+            for header, seq in parse_fasta(input.pep):
+                orf_id = header.split()[0]
+
+                transcript_id = orf_id
+                if ".p" in orf_id:
+                    transcript_id = orf_id.rsplit(".p", 1)[0]
+
+                m = re.search(r"len=(\d+)", header)
+                length_aa = int(m.group(1)) if m else len(seq)
+                category = "microprotein" if length_aa <= MIN_MICROPROTEIN_AA else "protein"
+
+                out.write(f"{orf_id}\t{transcript_id}\t{length_aa}\t{seq}\t{category}\n")
+
+rule split_microproteins:
+    input:
+        tsv=f"{OUT_DIR}/orf/orf_metadata.tsv"
+    output:
+        tsv=f"{OUT_DIR}/orf/microproteins.tsv"
+    run:
+        import csv
+
+        with open(input.tsv) as inf, open(output.tsv, "w", newline="") as outf:
+            reader = csv.DictReader(inf, delimiter="\t")
+            writer = csv.DictWriter(outf, fieldnames=reader.fieldnames, delimiter="\t")
+            writer.writeheader()
+            for row in reader:
+                if row["category"] == "microprotein":
+                    writer.writerow(row)
+```
+
+### Run Discovery Filtered Microproteins Configuration File
+
+The pipeline must be run using sbatch on the Biowulf cluster.
+
+```bash
+sbatch --time=00-00:20:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_discovery.smk --cores 8"
+```
+
+## Create Filtered Novel Microproteins Pipeline Working Directory
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
+mkdir Novel_Microproteins
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Novel_Microproteins/
+mkdir high_confidence
+mkdir discovery
+```
+
+## Generate Filtered Novel Microproteins Pipeline Configuration
+
+### Install Novel Microproteins Tools
+
+```bash
+conda create -n smorf \
+  -c conda-forge -c bioconda \
+  r-base=4.4 \
+  r-data.table \
+  r-stringr \
+  bioconductor-biostrings \
+  bioconductor-rtracklayer \
+  diamond \
+  -y
+
+conda activate smorf
+```
+
+### Create Filtered Novel Microproteins High Confidence Configuration File
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+
+nano Microproteins_Novel_HighConfidence.r
+
+# Add the following code to the configuration file:
+
+suppressPackageStartupMessages({
+  library(Biostrings)
+  library(data.table)
+  library(stringr)
+  library(rtracklayer)
+})
+
+# =========================
+# User inputs
+# =========================
+
+pep_fasta    <- "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder.pep"
+gtf_file     <- "reference/Homo_sapiens.GRCh38.115.gtf"
+
+out_dir <- "run_bulkRNA/Novel_Microproteins/high_confidence"
+out_prefix   <- file.path(out_dir, "smorf_results")
+max_aa_len   <- 100
+
+diamond_evalue    <- "1e-5"
+diamond_max_hits   <- 5
+
+# DIAMOND databases
+uniprot_full_db <- "reference/uniprot_full.dmnd"
+sprot_db        <- "reference/uniprot_sprot.dmnd"
+openprot_db     <- "reference/openprot_human.dmnd"
+smprot_db       <- "reference/smprot2_human_ribo.dmnd"
+
+# =========================
+# Helper functions
+# =========================
+
+parse_transdecoder_header <- function(hdr) {
+  # Example:
+  # ENST00000832824.p1 type:complete gc:universal ENST00000832824:764-345(-)
+
+  first_token <- sub(" .*", "", hdr)
+
+  tx_orf <- first_token
+  tx_id <- sub("\\.p[0-9]+$", "", tx_orf)
+  orf_id <- tx_orf
+
+  coord_str <- NA_character_
+  if (grepl(":[0-9]+-[0-9]+\\([+-]\\)$", hdr)) {
+    coord_str <- sub(".* ([^ ]+:[0-9]+-[0-9]+\\([+-]\\))$", "\\1", hdr)
+  }
+
+  transcript_id_from_coord <- NA_character_
+  tx_start <- NA_integer_
+  tx_end <- NA_integer_
+  strand <- NA_character_
+
+  if (!is.na(coord_str)) {
+    m <- str_match(coord_str, "^(.+):([0-9]+)-([0-9]+)\\(([+-])\\)$")
+    transcript_id_from_coord <- m[, 2]
+    tx_start <- suppressWarnings(as.integer(m[, 3]))
+    tx_end <- suppressWarnings(as.integer(m[, 4]))
+    strand <- m[, 5]
+  }
+
+  data.table(
+    header = hdr,
+    orf_id = orf_id,
+    tx_id = tx_id,
+    tx_id_from_coord = transcript_id_from_coord,
+    tx_start = tx_start,
+    tx_end = tx_end,
+    strand = strand
+  )
+}
+
+clean_interval <- function(a, b) {
+  c(min(a, b), max(a, b))
+}
+
+map_tx_interval_to_genome <- function(tx_start, tx_end, exons_df) {
+  if (nrow(exons_df) == 0 || any(is.na(c(tx_start, tx_end)))) {
+    return(list(
+      chrom = NA_character_,
+      genomic_start = NA_integer_,
+      genomic_end = NA_integer_,
+      strand = NA_character_
+    ))
+  }
+
+  exons_df <- as.data.table(exons_df)
+
+  strand <- unique(exons_df$strand)
+  chrom <- unique(as.character(exons_df$seqnames))
+  strand <- strand[1]
+  chrom <- chrom[1]
+
+  if (strand == "+") {
+    setorder(exons_df, start, end)
+  } else {
+    setorder(exons_df, -start, -end)
+  }
+
+  exons_df[, exon_len := end - start + 1L]
+  exons_df[, tx_exon_start := cumsum(c(0L, head(exon_len, -1L))) + 1L]
+  exons_df[, tx_exon_end := cumsum(exon_len)]
+
+  map_one_pos <- function(tx_pos) {
+    hit <- exons_df[tx_exon_start <= tx_pos & tx_exon_end >= tx_pos][1]
+    if (nrow(hit) == 0) return(NA_integer_)
+
+    offset <- tx_pos - hit$tx_exon_start
+    if (strand == "+") {
+      hit$start + offset
+    } else {
+      hit$end - offset
+    }
+  }
+
+  g1 <- map_one_pos(tx_start)
+  g2 <- map_one_pos(tx_end)
+
+  if (is.na(g1) || is.na(g2)) {
+    return(list(
+      chrom = chrom,
+      genomic_start = NA_integer_,
+      genomic_end = NA_integer_,
+      strand = strand
+    ))
+  }
+
+  list(
+    chrom = chrom,
+    genomic_start = min(g1, g2),
+    genomic_end = max(g1, g2),
+    strand = strand
+  )
+}
+
+run_diamond <- function(query_fa, db, out_tsv, evalue = "1e-5", max_hits = 5) {
+  diamond_cmd <- c(
+    "blastp",
+    "-q", query_fa,
+    "-d", db,
+    "-o", out_tsv,
+    "-e", evalue,
+    "-k", as.character(max_hits),
+    "--quiet",
+    "--outfmt", "6",
+    "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+    "qstart", "qend", "sstart", "send", "evalue", "bitscore", "qlen", "slen"
+  )
+
+  message("Running DIAMOND against: ", db)
+  status <- system2("diamond", diamond_cmd)
+  if (!identical(status, 0L)) {
+    warning("DIAMOND returned non-zero exit status for: ", db)
+  }
+}
+
+read_best_hits <- function(tsv_file, db_name) {
+  if (!file.exists(tsv_file) || file.info(tsv_file)$size == 0) return(NULL)
+
+  hits <- fread(tsv_file, header = FALSE)
+  setnames(hits, c(
+    "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+    "qstart", "qend", "sstart", "send", "evalue", "bitscore", "qlen", "slen"
+  ))
+
+  hits[, `:=`(
+    pident = as.numeric(pident),
+    length = as.numeric(length),
+    evalue = as.numeric(evalue),
+    bitscore = as.numeric(bitscore),
+    qlen = as.numeric(qlen),
+    slen = as.numeric(slen)
+  )]
+
+  hits[, `:=`(
+    qcov = length / qlen,
+    scov = length / slen,
+    db = db_name
+  )]
+
+  # Best hit = lowest evalue, then highest bitscore, then highest identity, then highest qcov
+  setorder(hits, qseqid, evalue, -bitscore, -pident, -qcov)
+  hits[, .SD[1], by = qseqid]
+}
+
+# =========================
+# Read and filter peptides
+# =========================
+
+pep <- readAAStringSet(pep_fasta)
+hdrs <- names(pep)
+aa_len <- width(pep)
+
+meta <- rbindlist(lapply(hdrs, parse_transdecoder_header), fill = TRUE)
+meta[, aa_len := aa_len]
+
+# Keep only ORFs below the threshold
+keep_idx <- aa_len <= max_aa_len
+pep_smorf <- pep[keep_idx]
+meta_smorf <- meta[keep_idx]
+
+# Write filtered peptide FASTA
+smorf_pep_fa <- paste0(out_prefix, ".smorfs_lt", max_aa_len, "aa.pep.fa")
+names(pep_smorf) <- meta_smorf$orf_id
+writeXStringSet(pep_smorf, smorf_pep_fa)
+
+# =========================
+# DIAMOND searches
+# =========================
+
+openprot_tsv <- paste0(out_prefix, ".openprot.tsv")
+smprot_tsv   <- paste0(out_prefix, ".smprot.tsv")
+sprot_tsv    <- paste0(out_prefix, ".uniprot_sprot.tsv")
+uniprot_tsv  <- paste0(out_prefix, ".uniprot_full.tsv")
+
+run_diamond(smorf_pep_fa, openprot_db, openprot_tsv, evalue = diamond_evalue, max_hits = diamond_max_hits)
+run_diamond(smorf_pep_fa, smprot_db,   smprot_tsv,   evalue = diamond_evalue, max_hits = diamond_max_hits)
+run_diamond(smorf_pep_fa, sprot_db,    sprot_tsv,    evalue = diamond_evalue, max_hits = diamond_max_hits)
+run_diamond(smorf_pep_fa, uniprot_full_db, uniprot_tsv, evalue = diamond_evalue, max_hits = diamond_max_hits)
+
+openprot_best <- read_best_hits(openprot_tsv, "openprot")
+smprot_best   <- read_best_hits(smprot_tsv,   "smprot")
+sprot_best    <- read_best_hits(sprot_tsv,    "sprot")
+uniprot_best  <- read_best_hits(uniprot_tsv,  "uniprot_full")
+
+# =========================
+# GTF processing
+# =========================
+
+tx_anno <- NULL
+tx_exons <- NULL
+
+if (!is.null(gtf_file) && file.exists(gtf_file)) {
+  message("Reading GTF...")
+  gtf <- import(gtf_file)
+  gtf_df <- as.data.frame(gtf)
+  rm(gtf)
+  gc()
+
+  if (!("transcript_id" %in% names(gtf_df))) {
+    stop("GTF does not contain a transcript_id column in metadata.")
+  }
+
+  anno_cols <- intersect(
+    c("transcript_id", "gene_id", "gene_name", "gene_type", "transcript_type", "biotype"),
+    names(gtf_df)
+  )
+
+  if (length(anno_cols) > 0) {
+    tx_anno <- unique(gtf_df[, anno_cols, drop = FALSE])
+  }
+
+  exons_only <- gtf_df[gtf_df$type == "exon", , drop = FALSE]
+
+  if (nrow(exons_only) > 0) {
+    exons_only <- exons_only[, intersect(
+      c("seqnames", "start", "end", "strand", "transcript_id"),
+      names(exons_only)
+    ), drop = FALSE]
+
+    tx_exons <- as.data.table(exons_only)
+    setkey(tx_exons, transcript_id)
+  }
+}
+
+# =========================
+# Build annotation table
+# =========================
+
+smorf_dt <- copy(meta_smorf)
+
+# Use transcript ID from coordinate field if available
+smorf_dt[, transcript_id := fifelse(!is.na(tx_id_from_coord), tx_id_from_coord, tx_id)]
+
+# Initialize columns
+smorf_dt[, `:=`(
+  openprot_hit = NA_character_,
+  openprot_pident = NA_real_,
+  openprot_qcov = NA_real_,
+  openprot_evalue = NA_real_,
+  openprot_bitscore = NA_real_,
+
+  smprot_hit = NA_character_,
+  smprot_pident = NA_real_,
+  smprot_qcov = NA_real_,
+  smprot_evalue = NA_real_,
+  smprot_bitscore = NA_real_,
+
+  sprot_hit = NA_character_,
+  sprot_pident = NA_real_,
+  sprot_qcov = NA_real_,
+  sprot_evalue = NA_real_,
+  sprot_bitscore = NA_real_,
+
+  uniprot_hit = NA_character_,
+  uniprot_pident = NA_real_,
+  uniprot_qcov = NA_real_,
+  uniprot_evalue = NA_real_,
+  uniprot_bitscore = NA_real_,
+
+  genomic_chrom = NA_character_,
+  genomic_start = NA_integer_,
+  genomic_end = NA_integer_,
+  genomic_strand = NA_character_
+)]
+
+# Attach DIAMOND hits by qseqid -> orf_id
+if (!is.null(openprot_best) && nrow(openprot_best) > 0) {
+  smorf_dt[openprot_best, on = c(orf_id = "qseqid"), `:=`(
+    openprot_hit = i.sseqid,
+    openprot_pident = i.pident,
+    openprot_qcov = i.qcov,
+    openprot_evalue = i.evalue,
+    openprot_bitscore = i.bitscore
+  )]
+}
+
+if (!is.null(smprot_best) && nrow(smprot_best) > 0) {
+  smorf_dt[smprot_best, on = c(orf_id = "qseqid"), `:=`(
+    smprot_hit = i.sseqid,
+    smprot_pident = i.pident,
+    smprot_qcov = i.qcov,
+    smprot_evalue = i.evalue,
+    smprot_bitscore = i.bitscore
+  )]
+}
+
+if (!is.null(sprot_best) && nrow(sprot_best) > 0) {
+  smorf_dt[sprot_best, on = c(orf_id = "qseqid"), `:=`(
+    sprot_hit = i.sseqid,
+    sprot_pident = i.pident,
+    sprot_qcov = i.qcov,
+    sprot_evalue = i.evalue,
+    sprot_bitscore = i.bitscore
+  )]
+}
+
+if (!is.null(uniprot_best) && nrow(uniprot_best) > 0) {
+  smorf_dt[uniprot_best, on = c(orf_id = "qseqid"), `:=`(
+    uniprot_hit = i.sseqid,
+    uniprot_pident = i.pident,
+    uniprot_qcov = i.qcov,
+    uniprot_evalue = i.evalue,
+    uniprot_bitscore = i.bitscore
+  )]
+}
+
+# =========================
+# Optional genomic mapping
+# =========================
+
+if (!is.null(tx_exons)) {
+  map_res <- lapply(seq_len(nrow(smorf_dt)), function(i) {
+    tx <- smorf_dt$transcript_id[i]
+    if (is.na(tx) || !(tx %in% tx_exons$transcript_id)) {
+      return(list(
+        chrom = NA_character_,
+        genomic_start = NA_integer_,
+        genomic_end = NA_integer_,
+        strand = NA_character_
+      ))
+    }
+
+    tx_df <- tx_exons[J(tx), nomatch = 0L]
+    tx_df <- as.data.frame(tx_df)
+    tx_df <- tx_df[, intersect(c("seqnames", "start", "end", "strand"), names(tx_df)), drop = FALSE]
+
+    interval <- clean_interval(smorf_dt$tx_start[i], smorf_dt$tx_end[i])
+    map_tx_interval_to_genome(interval[1], interval[2], tx_df)
+  })
+
+smorf_dt[, genomic_chrom := vapply(map_res, function(x) as.character(x$chrom), character(1))]
+smorf_dt[, genomic_start := vapply(map_res, function(x) as.integer(x$genomic_start), integer(1))]
+smorf_dt[, genomic_end := vapply(map_res, function(x) as.integer(x$genomic_end), integer(1))]
+smorf_dt[, genomic_strand := vapply(map_res, function(x) as.character(x$strand), character(1))]
+}
+
+# =========================
+# Classification logic
+# =========================
+
+smorf_dt[, `:=`(
+  hit_in_openprot = !is.na(openprot_hit),
+  hit_in_smprot = !is.na(smprot_hit),
+
+  strong_hit_in_sprot = !is.na(sprot_hit) &
+    !is.na(sprot_evalue) & sprot_evalue <= 1e-20 &
+    !is.na(sprot_pident) & sprot_pident >= 90 &
+    !is.na(sprot_qcov) & sprot_qcov >= 0.80,
+
+  weak_hit_in_uniprot = !is.na(uniprot_hit) &
+    !is.na(uniprot_evalue) & uniprot_evalue <= 1e-5 &
+    !is.na(uniprot_pident) & uniprot_pident >= 30 &
+    !is.na(uniprot_qcov) & uniprot_qcov >= 0.50
+)]
+
+smorf_dt[, class := fifelse(
+  hit_in_openprot | hit_in_smprot,
+  "known_microprotein",
+  fifelse(
+    strong_hit_in_sprot,
+    "known_canonical",
+    fifelse(
+      weak_hit_in_uniprot,
+      "homologous",
+      "novel_candidate"
+    )
+  )
+)]
+
+# =========================
+# Final cleanup / output
+# =========================
+
+# Optional: order columns a little more nicely
+setcolorder(smorf_dt, c(
+  "header", "orf_id", "tx_id", "tx_id_from_coord", "transcript_id",
+  "tx_start", "tx_end", "strand", "aa_len",
+  "genomic_chrom", "genomic_start", "genomic_end", "genomic_strand",
+  "openprot_hit", "openprot_pident", "openprot_qcov", "openprot_evalue", "openprot_bitscore",
+  "smprot_hit", "smprot_pident", "smprot_qcov", "smprot_evalue", "smprot_bitscore",
+  "sprot_hit", "sprot_pident", "sprot_qcov", "sprot_evalue", "sprot_bitscore",
+  "uniprot_hit", "uniprot_pident", "uniprot_qcov", "uniprot_evalue", "uniprot_bitscore",
+  "hit_in_openprot", "hit_in_smprot", "strong_hit_in_sprot", "weak_hit_in_uniprot",
+  "class"
+))
+
+fwrite(
+  smorf_dt,
+  paste0(out_prefix, ".smorf_classification.tsv"),
+  sep = "\t",
+  na = "NA"
+)
+
+message("Done. Wrote: ", paste0(out_prefix, ".smorf_classification.tsv"))
+```
+
+### Run Filtered Novel Microproteins High Confidence Configuration File
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS/
+
+sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=1:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; which Rscript; echo ENV_OK; Rscript Microproteins_Novel_HighConfidence.r; echo DONE $(date)"
+
+```
+
+### Create Filtered Novel Microproteins Discovery Configuration File
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS
+
+nano Microproteins_Novel_Discovery.r
+
+# Add the following code to the configuration file:
+
+suppressPackageStartupMessages({
+  library(Biostrings)
+  library(data.table)
+  library(stringr)
+  library(rtracklayer)
+})
+
+# =========================
+# User inputs
+# =========================
+
+pep_fasta    <- "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
+gtf_file     <- "reference/Homo_sapiens.GRCh38.115.gtf"
+
+out_dir <- "run_bulkRNA/Novel_Microproteins/discovery"
+out_prefix   <- file.path(out_dir, "smorf_results")
+max_aa_len   <- 100
+
+diamond_evalue    <- "1e-5"
+diamond_max_hits   <- 5
+
+# DIAMOND databases
+uniprot_full_db <- "reference/uniprot_full.dmnd"
+sprot_db        <- "reference/uniprot_sprot.dmnd"
+openprot_db     <- "reference/openprot_human.dmnd"
+smprot_db       <- "reference/smprot2_human_ribo.dmnd"
+
+# =========================
+# Helper functions
+# =========================
+
+parse_transdecoder_header <- function(hdr) {
+  # Example:
+  # ENST00000832824.p1 type:complete gc:universal ENST00000832824:764-345(-)
+
+  first_token <- sub(" .*", "", hdr)
+
+  tx_orf <- first_token
+  tx_id <- sub("\\.p[0-9]+$", "", tx_orf)
+  orf_id <- tx_orf
+
+  coord_str <- NA_character_
+  if (grepl(":[0-9]+-[0-9]+\\([+-]\\)$", hdr)) {
+    coord_str <- sub(".* ([^ ]+:[0-9]+-[0-9]+\\([+-]\\))$", "\\1", hdr)
+  }
+
+  transcript_id_from_coord <- NA_character_
+  tx_start <- NA_integer_
+  tx_end <- NA_integer_
+  strand <- NA_character_
+
+  if (!is.na(coord_str)) {
+    m <- str_match(coord_str, "^(.+):([0-9]+)-([0-9]+)\\(([+-])\\)$")
+    transcript_id_from_coord <- m[, 2]
+    tx_start <- suppressWarnings(as.integer(m[, 3]))
+    tx_end <- suppressWarnings(as.integer(m[, 4]))
+    strand <- m[, 5]
+  }
+
+  data.table(
+    header = hdr,
+    orf_id = orf_id,
+    tx_id = tx_id,
+    tx_id_from_coord = transcript_id_from_coord,
+    tx_start = tx_start,
+    tx_end = tx_end,
+    strand = strand
+  )
+}
+
+clean_interval <- function(a, b) {
+  c(min(a, b), max(a, b))
+}
+
+map_tx_interval_to_genome <- function(tx_start, tx_end, exons_df) {
+  if (nrow(exons_df) == 0 || any(is.na(c(tx_start, tx_end)))) {
+    return(list(
+      chrom = NA_character_,
+      genomic_start = NA_integer_,
+      genomic_end = NA_integer_,
+      strand = NA_character_
+    ))
+  }
+
+  exons_df <- as.data.table(exons_df)
+
+  strand <- unique(exons_df$strand)
+  chrom <- unique(as.character(exons_df$seqnames))
+  strand <- strand[1]
+  chrom <- chrom[1]
+
+  if (strand == "+") {
+    setorder(exons_df, start, end)
+  } else {
+    setorder(exons_df, -start, -end)
+  }
+
+  exons_df[, exon_len := end - start + 1L]
+  exons_df[, tx_exon_start := cumsum(c(0L, head(exon_len, -1L))) + 1L]
+  exons_df[, tx_exon_end := cumsum(exon_len)]
+
+  map_one_pos <- function(tx_pos) {
+    hit <- exons_df[tx_exon_start <= tx_pos & tx_exon_end >= tx_pos][1]
+    if (nrow(hit) == 0) return(NA_integer_)
+
+    offset <- tx_pos - hit$tx_exon_start
+    if (strand == "+") {
+      hit$start + offset
+    } else {
+      hit$end - offset
+    }
+  }
+
+  g1 <- map_one_pos(tx_start)
+  g2 <- map_one_pos(tx_end)
+
+  if (is.na(g1) || is.na(g2)) {
+    return(list(
+      chrom = chrom,
+      genomic_start = NA_integer_,
+      genomic_end = NA_integer_,
+      strand = strand
+    ))
+  }
+
+  list(
+    chrom = chrom,
+    genomic_start = min(g1, g2),
+    genomic_end = max(g1, g2),
+    strand = strand
+  )
+}
+
+run_diamond <- function(query_fa, db, out_tsv, evalue = "1e-5", max_hits = 5) {
+  diamond_cmd <- c(
+    "blastp",
+    "-q", query_fa,
+    "-d", db,
+    "-o", out_tsv,
+    "-e", evalue,
+    "-k", as.character(max_hits),
+    "--quiet",
+    "--outfmt", "6",
+    "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+    "qstart", "qend", "sstart", "send", "evalue", "bitscore", "qlen", "slen"
+  )
+
+  message("Running DIAMOND against: ", db)
+  status <- system2("diamond", diamond_cmd)
+  if (!identical(status, 0L)) {
+    warning("DIAMOND returned non-zero exit status for: ", db)
+  }
+}
+
+read_best_hits <- function(tsv_file, db_name) {
+  if (!file.exists(tsv_file) || file.info(tsv_file)$size == 0) return(NULL)
+
+  hits <- fread(tsv_file, header = FALSE)
+  setnames(hits, c(
+    "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+    "qstart", "qend", "sstart", "send", "evalue", "bitscore", "qlen", "slen"
+  ))
+
+  hits[, `:=`(
+    pident = as.numeric(pident),
+    length = as.numeric(length),
+    evalue = as.numeric(evalue),
+    bitscore = as.numeric(bitscore),
+    qlen = as.numeric(qlen),
+    slen = as.numeric(slen)
+  )]
+
+  hits[, `:=`(
+    qcov = length / qlen,
+    scov = length / slen,
+    db = db_name
+  )]
+
+  # Best hit = lowest evalue, then highest bitscore, then highest identity, then highest qcov
+  setorder(hits, qseqid, evalue, -bitscore, -pident, -qcov)
+  hits[, .SD[1], by = qseqid]
+}
+
+# =========================
+# Read and filter peptides
+# =========================
+
+pep <- readAAStringSet(pep_fasta)
+hdrs <- names(pep)
+aa_len <- width(pep)
+
+meta <- rbindlist(lapply(hdrs, parse_transdecoder_header), fill = TRUE)
+meta[, aa_len := aa_len]
+
+# Keep only ORFs below the threshold
+keep_idx <- aa_len <= max_aa_len
+pep_smorf <- pep[keep_idx]
+meta_smorf <- meta[keep_idx]
+
+# Write filtered peptide FASTA
+smorf_pep_fa <- paste0(out_prefix, ".smorfs_lt", max_aa_len, "aa.pep.fa")
+names(pep_smorf) <- meta_smorf$orf_id
+writeXStringSet(pep_smorf, smorf_pep_fa)
+
+# =========================
+# DIAMOND searches
+# =========================
+
+openprot_tsv <- paste0(out_prefix, ".openprot.tsv")
+smprot_tsv   <- paste0(out_prefix, ".smprot.tsv")
+sprot_tsv    <- paste0(out_prefix, ".uniprot_sprot.tsv")
+uniprot_tsv  <- paste0(out_prefix, ".uniprot_full.tsv")
+
+run_diamond(smorf_pep_fa, openprot_db, openprot_tsv, evalue = diamond_evalue, max_hits = diamond_max_hits)
+run_diamond(smorf_pep_fa, smprot_db,   smprot_tsv,   evalue = diamond_evalue, max_hits = diamond_max_hits)
+run_diamond(smorf_pep_fa, sprot_db,    sprot_tsv,    evalue = diamond_evalue, max_hits = diamond_max_hits)
+run_diamond(smorf_pep_fa, uniprot_full_db, uniprot_tsv, evalue = diamond_evalue, max_hits = diamond_max_hits)
+
+openprot_best <- read_best_hits(openprot_tsv, "openprot")
+smprot_best   <- read_best_hits(smprot_tsv,   "smprot")
+sprot_best    <- read_best_hits(sprot_tsv,    "sprot")
+uniprot_best  <- read_best_hits(uniprot_tsv,  "uniprot_full")
+
+# =========================
+# GTF processing
+# =========================
+
+tx_anno <- NULL
+tx_exons <- NULL
+
+if (!is.null(gtf_file) && file.exists(gtf_file)) {
+  message("Reading GTF...")
+  gtf <- import(gtf_file)
+  gtf_df <- as.data.frame(gtf)
+  rm(gtf)
+  gc()
+
+  if (!("transcript_id" %in% names(gtf_df))) {
+    stop("GTF does not contain a transcript_id column in metadata.")
+  }
+
+  anno_cols <- intersect(
+    c("transcript_id", "gene_id", "gene_name", "gene_type", "transcript_type", "biotype"),
+    names(gtf_df)
+  )
+
+  if (length(anno_cols) > 0) {
+    tx_anno <- unique(gtf_df[, anno_cols, drop = FALSE])
+  }
+
+  exons_only <- gtf_df[gtf_df$type == "exon", , drop = FALSE]
+
+  if (nrow(exons_only) > 0) {
+    exons_only <- exons_only[, intersect(
+      c("seqnames", "start", "end", "strand", "transcript_id"),
+      names(exons_only)
+    ), drop = FALSE]
+
+    tx_exons <- as.data.table(exons_only)
+    setkey(tx_exons, transcript_id)
+  }
+}
+
+# =========================
+# Build annotation table
+# =========================
+
+smorf_dt <- copy(meta_smorf)
+
+# Use transcript ID from coordinate field if available
+smorf_dt[, transcript_id := fifelse(!is.na(tx_id_from_coord), tx_id_from_coord, tx_id)]
+
+# Initialize columns
+smorf_dt[, `:=`(
+  openprot_hit = NA_character_,
+  openprot_pident = NA_real_,
+  openprot_qcov = NA_real_,
+  openprot_evalue = NA_real_,
+  openprot_bitscore = NA_real_,
+
+  smprot_hit = NA_character_,
+  smprot_pident = NA_real_,
+  smprot_qcov = NA_real_,
+  smprot_evalue = NA_real_,
+  smprot_bitscore = NA_real_,
+
+  sprot_hit = NA_character_,
+  sprot_pident = NA_real_,
+  sprot_qcov = NA_real_,
+  sprot_evalue = NA_real_,
+  sprot_bitscore = NA_real_,
+
+  uniprot_hit = NA_character_,
+  uniprot_pident = NA_real_,
+  uniprot_qcov = NA_real_,
+  uniprot_evalue = NA_real_,
+  uniprot_bitscore = NA_real_,
+
+  genomic_chrom = NA_character_,
+  genomic_start = NA_integer_,
+  genomic_end = NA_integer_,
+  genomic_strand = NA_character_
+)]
+
+# Attach DIAMOND hits by qseqid -> orf_id
+if (!is.null(openprot_best) && nrow(openprot_best) > 0) {
+  smorf_dt[openprot_best, on = c(orf_id = "qseqid"), `:=`(
+    openprot_hit = i.sseqid,
+    openprot_pident = i.pident,
+    openprot_qcov = i.qcov,
+    openprot_evalue = i.evalue,
+    openprot_bitscore = i.bitscore
+  )]
+}
+
+if (!is.null(smprot_best) && nrow(smprot_best) > 0) {
+  smorf_dt[smprot_best, on = c(orf_id = "qseqid"), `:=`(
+    smprot_hit = i.sseqid,
+    smprot_pident = i.pident,
+    smprot_qcov = i.qcov,
+    smprot_evalue = i.evalue,
+    smprot_bitscore = i.bitscore
+  )]
+}
+
+if (!is.null(sprot_best) && nrow(sprot_best) > 0) {
+  smorf_dt[sprot_best, on = c(orf_id = "qseqid"), `:=`(
+    sprot_hit = i.sseqid,
+    sprot_pident = i.pident,
+    sprot_qcov = i.qcov,
+    sprot_evalue = i.evalue,
+    sprot_bitscore = i.bitscore
+  )]
+}
+
+if (!is.null(uniprot_best) && nrow(uniprot_best) > 0) {
+  smorf_dt[uniprot_best, on = c(orf_id = "qseqid"), `:=`(
+    uniprot_hit = i.sseqid,
+    uniprot_pident = i.pident,
+    uniprot_qcov = i.qcov,
+    uniprot_evalue = i.evalue,
+    uniprot_bitscore = i.bitscore
+  )]
+}
+
+# =========================
+# Optional genomic mapping
+# =========================
+
+if (!is.null(tx_exons)) {
+  map_res <- lapply(seq_len(nrow(smorf_dt)), function(i) {
+    tx <- smorf_dt$transcript_id[i]
+    if (is.na(tx) || !(tx %in% tx_exons$transcript_id)) {
+      return(list(
+        chrom = NA_character_,
+        genomic_start = NA_integer_,
+        genomic_end = NA_integer_,
+        strand = NA_character_
+      ))
+    }
+
+    tx_df <- tx_exons[J(tx), nomatch = 0L]
+    tx_df <- as.data.frame(tx_df)
+    tx_df <- tx_df[, intersect(c("seqnames", "start", "end", "strand"), names(tx_df)), drop = FALSE]
+
+    interval <- clean_interval(smorf_dt$tx_start[i], smorf_dt$tx_end[i])
+    map_tx_interval_to_genome(interval[1], interval[2], tx_df)
+  })
+
+smorf_dt[, genomic_chrom := vapply(map_res, function(x) as.character(x$chrom), character(1))]
+smorf_dt[, genomic_start := vapply(map_res, function(x) as.integer(x$genomic_start), integer(1))]
+smorf_dt[, genomic_end := vapply(map_res, function(x) as.integer(x$genomic_end), integer(1))]
+smorf_dt[, genomic_strand := vapply(map_res, function(x) as.character(x$strand), character(1))]
+}
+
+# =========================
+# Classification logic
+# =========================
+
+smorf_dt[, `:=`(
+  hit_in_openprot = !is.na(openprot_hit),
+  hit_in_smprot = !is.na(smprot_hit),
+
+  strong_hit_in_sprot = !is.na(sprot_hit) &
+    !is.na(sprot_evalue) & sprot_evalue <= 1e-20 &
+    !is.na(sprot_pident) & sprot_pident >= 90 &
+    !is.na(sprot_qcov) & sprot_qcov >= 0.80,
+
+  weak_hit_in_uniprot = !is.na(uniprot_hit) &
+    !is.na(uniprot_evalue) & uniprot_evalue <= 1e-5 &
+    !is.na(uniprot_pident) & uniprot_pident >= 30 &
+    !is.na(uniprot_qcov) & uniprot_qcov >= 0.50
+)]
+
+smorf_dt[, class := fifelse(
+  hit_in_openprot | hit_in_smprot,
+  "known_microprotein",
+  fifelse(
+    strong_hit_in_sprot,
+    "known_canonical",
+    fifelse(
+      weak_hit_in_uniprot,
+      "homologous",
+      "novel_candidate"
+    )
+  )
+)]
+
+# =========================
+# Final cleanup / output
+# =========================
+
+# Optional: order columns a little more nicely
+setcolorder(smorf_dt, c(
+  "header", "orf_id", "tx_id", "tx_id_from_coord", "transcript_id",
+  "tx_start", "tx_end", "strand", "aa_len",
+  "genomic_chrom", "genomic_start", "genomic_end", "genomic_strand",
+  "openprot_hit", "openprot_pident", "openprot_qcov", "openprot_evalue", "openprot_bitscore",
+  "smprot_hit", "smprot_pident", "smprot_qcov", "smprot_evalue", "smprot_bitscore",
+  "sprot_hit", "sprot_pident", "sprot_qcov", "sprot_evalue", "sprot_bitscore",
+  "uniprot_hit", "uniprot_pident", "uniprot_qcov", "uniprot_evalue", "uniprot_bitscore",
+  "hit_in_openprot", "hit_in_smprot", "strong_hit_in_sprot", "weak_hit_in_uniprot",
+  "class"
+))
+
+fwrite(
+  smorf_dt,
+  paste0(out_prefix, ".smorf_classification.tsv"),
+  sep = "\t",
+  na = "NA"
+)
+
+message("Done. Wrote: ", paste0(out_prefix, ".smorf_classification.tsv"))
+```
+
+### Run Filtered Novel Microproteins Discovery Configuration File
+
+```bash
+cd /data/mckeeka/bulkRNA_RMS/
+
+sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=5:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; which Rscript; echo ENV_OK; Rscript Microproteins_Novel_Discovery.r; echo DONE $(date)"
+
+```
+
