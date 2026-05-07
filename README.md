@@ -2830,19 +2830,19 @@ sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=5:00:00 --output=smor
 
 ```
 
-## Create Filtered Microproteins Pipeline Working Directory
+## Create Unfiltered Microproteins Pipeline Working Directory
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
 mkdir Microproteins
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Microproteins
-mkdir filtered
-cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Microproteins/filtered/
+mkdir unfiltered
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Microproteins/unfiltered/
 mkdir high_confidence
 mkdir discovery
 ```
 
-## Generate Filtered Microproteins Pipeline Configuration
+## Generate Unfiltered Microproteins Pipeline Configuration
 
 ### Install Microproteins Tools
 
@@ -2852,10 +2852,10 @@ conda create -n Microproteins -c conda-forge -c bioconda snakemake gffread trans
 conda activate Microproteins
 ```
 
-### Create High Confidence Filtered Microproteins Configuration File
+### Create High Confidence Unfiltered Microproteins Configuration File
 
 ```bash
-nano Microproteins_highconfidence.smk
+nano Microproteins_highconfidence_unfiltered.smk
 
 # Add the following code to the configuration file:
 
@@ -2865,8 +2865,8 @@ from glob import glob
 MIN_MICROPROTEIN_AA = 100
 GENOME_FASTA = "reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
 GTF = "reference/Homo_sapiens.GRCh38.115.gtf"
-COUNTS = "run_bulkRNA/FeatureCounts/gene_counts_filtered.txt"
-OUT_DIR = "run_bulkRNA/Microproteins/high_confidence"
+COUNTS = "run_bulkRNA/FeatureCounts/gene_counts_unfiltered.txt"
+OUT_DIR = "run_bulkRNA/Microproteins/unfiltered/high_confidence"
 BAM_DIR = "run_bulkRNA/STAR_new"
 
 SAMPLES = sorted(
@@ -2876,8 +2876,8 @@ SAMPLES = sorted(
 
 rule all:
     input:
-        expand("run_bulkRNA/Microproteins/stringtie/{sample}.gtf", sample=SAMPLES),
-        "run_bulkRNA/Microproteins/high_confidence/orf/merged.gtf",
+        expand("run_bulkRNA/Microproteins/unfiltered/stringtie/{sample}.gtf", sample=SAMPLES),
+        "run_bulkRNA/Microproteins/unfiltered/high_confidence/orf/merged.gtf",
         f"{OUT_DIR}/orf/transcripts.fa",
         f"{OUT_DIR}/orf/transcripts.fa.transdecoder.pep",
         f"{OUT_DIR}/orf/transcripts.fa.transdecoder.gff3",
@@ -2889,28 +2889,28 @@ rule stringtie_assemble:
     input:
         bam=f"{BAM_DIR}/{{sample}}.Aligned.sortedByCoord.out.bam"
     output:
-        gtf="run_bulkRNA/Microproteins/stringtie/{sample}.gtf"
+        gtf="run_bulkRNA/Microproteins/unfiltered/stringtie/{sample}.gtf"
     shell:
         """
-        mkdir -p run_bulkRNA/Microproteins/stringtie
+        mkdir -p run_bulkRNA/Microproteins/unfiltered/stringtie
         stringtie {input.bam} -G {GTF} -o {output.gtf}
         """
 
 rule merge_transcripts:
     input:
-        gtfs=expand("run_bulkRNA/Microproteins/stringtie/{sample}.gtf", sample=SAMPLES)
+        gtfs=expand("run_bulkRNA/Microproteins/unfiltered/stringtie/{sample}.gtf", sample=SAMPLES)
     output:
-        merged="run_bulkRNA/Microproteins/high_confidence/orf/merged.gtf"
+        merged="run_bulkRNA/Microproteins/unfiltered/high_confidence/orf/merged.gtf"
     shell:
         """
-        mkdir -p run_bulkRNA/Microproteins/high_confidence/orf
+        mkdir -p run_bulkRNA/Microproteins/unfiltered/high_confidence/orf
         stringtie --merge -G {GTF} -o {output.merged} {input.gtfs}
         """
 
 rule extract_transcripts:
     input:
         genome=GENOME_FASTA,
-        gtf="run_bulkRNA/Microproteins/high_confidence/orf/merged.gtf"
+        gtf="run_bulkRNA/Microproteins/unfiltered/high_confidence/orf/merged.gtf"
     output:
         fa=f"{OUT_DIR}/orf/transcripts.fa"
     shell:
@@ -3009,11 +3009,11 @@ rule count_qc_plots:
     input:
         counts=COUNTS
     output:
-        lib="run_bulkRNA/Microproteins/qc/library_sizes.pdf",
-        dist="run_bulkRNA/Microproteins/qc/count_distribution.pdf"
+        lib="run_bulkRNA/Microproteins/unfiltered/qc/library_sizes.pdf",
+        dist="run_bulkRNA/Microproteins/unfiltered/qc/count_distribution.pdf"
     shell:
         r"""
-        mkdir -p run_bulkRNA/Microproteins/qc
+        mkdir -p run_bulkRNA/Microproteins/unfiltered/qc
         Rscript -e '
           counts <- read.delim(
             "{input.counts}",
@@ -3052,26 +3052,26 @@ rule count_qc_plots:
         """
 ```
 
-### Run Microproteins High Confidence Configuration File
+### Run Microproteins High Confidence Unfiltered Configuration File
 
 The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
-sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_highconfidence.smk --cores 8"
+sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_highconfidence_unfiltered.smk --cores 8"
 ```
 
-### Create Discovery Filtered Microproteins Configuration File
+### Create Discovery Unfiltered Microproteins Configuration File
 
 ```bash
-nano Microproteins_discovery.smk
+nano Microproteins_discovery_unfiltered.smk
 
 # Add the following code to the configuration file:
 
 from pathlib import Path
 
 MIN_MICROPROTEIN_AA = 100
-pep_fasta = "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
-OUT_DIR = "run_bulkRNA/Microproteins/discovery"
+pep_fasta = "run_bulkRNA/Microproteins/unfiltered/high_confidence/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
+OUT_DIR = "run_bulkRNA/Microproteins/unfiltered/discovery"
 
 rule all:
     input:
@@ -3143,20 +3143,22 @@ rule split_microproteins:
 The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
-sbatch --time=00-00:20:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_discovery.smk --cores 8"
+sbatch --time=00-00:20:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_discovery_unfiltered.smk --cores 8"
 ```
 
-## Create Filtered Novel Microproteins Pipeline Working Directory
+## Create Unfiltered Novel Microproteins Pipeline Working Directory
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/
 mkdir Novel_Microproteins
 cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Novel_Microproteins/
+mkdir unfiltered
+cd /data/mckeeka/bulkRNA_RMS/run_bulkRNA/Novel_Microproteins/unfiltered/
 mkdir high_confidence
 mkdir discovery
 ```
 
-## Generate Filtered Novel Microproteins Pipeline Configuration
+## Generate Unfiltered Novel Microproteins Pipeline Configuration
 
 ### Install Novel Microproteins Tools
 
@@ -3174,12 +3176,12 @@ conda create -n smorf \
 conda activate smorf
 ```
 
-### Create Filtered Novel Microproteins High Confidence Configuration File
+### Create Unfiltered Novel Microproteins High Confidence Configuration File
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
 
-nano Microproteins_Novel_HighConfidence.r
+nano Microproteins_Novel_HighConfidence_unfiltered.r
 
 # Add the following code to the configuration file:
 
@@ -3194,10 +3196,10 @@ suppressPackageStartupMessages({
 # User inputs
 # =========================
 
-pep_fasta    <- "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder.pep"
+pep_fasta    <- "run_bulkRNA/Microproteins/unfiltered/high_confidence/orf/transcripts.fa.transdecoder.pep"
 gtf_file     <- "reference/Homo_sapiens.GRCh38.115.gtf"
 
-out_dir <- "run_bulkRNA/Novel_Microproteins/high_confidence"
+out_dir <- "run_bulkRNA/Novel_Microproteins/unfiltered/high_confidence"
 out_prefix   <- file.path(out_dir, "smorf_results")
 max_aa_len   <- 100
 
@@ -3618,21 +3620,21 @@ fwrite(
 message("Done. Wrote: ", paste0(out_prefix, ".smorf_classification.tsv"))
 ```
 
-### Run Filtered Novel Microproteins High Confidence Configuration File
+### Run Unfiltered Novel Microproteins High Confidence Configuration File
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/
 
-sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=1:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; which Rscript; echo ENV_OK; Rscript Microproteins_Novel_HighConfidence.r; echo DONE $(date)"
+sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=1:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; which Rscript; echo ENV_OK; Rscript Microproteins_Novel_HighConfidence_unfiltered.r; echo DONE $(date)"
 
 ```
 
-### Create Filtered Novel Microproteins Discovery Configuration File
+### Create Unfiltered Novel Microproteins Discovery Configuration File
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS
 
-nano Microproteins_Novel_Discovery.r
+nano Microproteins_Novel_Discovery_unfiltered.r
 
 # Add the following code to the configuration file:
 
@@ -3647,10 +3649,10 @@ suppressPackageStartupMessages({
 # User inputs
 # =========================
 
-pep_fasta    <- "run_bulkRNA/Microproteins/high_confidence/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
+pep_fasta    <- "run_bulkRNA/Microproteins/unfiltered/high_confidence/orf/transcripts.fa.transdecoder_dir/longest_orfs.pep"
 gtf_file     <- "reference/Homo_sapiens.GRCh38.115.gtf"
 
-out_dir <- "run_bulkRNA/Novel_Microproteins/discovery"
+out_dir <- "run_bulkRNA/Novel_Microproteins/unfiltered/discovery"
 out_prefix   <- file.path(out_dir, "smorf_results")
 max_aa_len   <- 100
 
@@ -4076,7 +4078,7 @@ message("Done. Wrote: ", paste0(out_prefix, ".smorf_classification.tsv"))
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/
 
-sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=5:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; which Rscript; echo ENV_OK; Rscript Microproteins_Novel_Discovery.r; echo DONE $(date)"
+sbatch --job-name=smorf --cpus-per-task=4 --mem=32G --time=5:00:00 --output=smorf_%j.out --error=smorf_%j.err --wrap="set -x; echo START $(date); source ~/.bashrc; conda activate smorf; which Rscript; echo ENV_OK; Rscript Microproteins_Novel_Discovery_unfiltered.r; echo DONE $(date)"
 
 ```
 
