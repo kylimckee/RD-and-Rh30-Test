@@ -4073,7 +4073,7 @@ fwrite(
 message("Done. Wrote: ", paste0(out_prefix, ".smorf_classification.tsv"))
 ```
 
-### Run Filtered Novel Microproteins Discovery Configuration File
+### Run Unfiltered Novel Microproteins Discovery Configuration File
 
 ```bash
 cd /data/mckeeka/bulkRNA_RMS/
