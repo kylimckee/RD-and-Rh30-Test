@@ -3057,7 +3057,7 @@ rule count_qc_plots:
 The pipeline must be run using sbatch on the Biowulf cluster.
 
 ```bash
-sbatch --time=00-02:00:00  --cpus-per-task=8 --mem=32G --wrap="snakemake -s Microproteins_highconfidence_unfiltered.smk --cores 8"
+sbatch --time=00-04:00:00  --cpus-per-task=8 --mem=48G --wrap="snakemake -s Microproteins_highconfidence_unfiltered.smk --cores 8"
 ```
 
 ### Create Discovery Unfiltered Microproteins Configuration File
